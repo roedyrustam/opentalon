@@ -661,4 +661,100 @@ skillsCommand
     console.log(`🗑️ Successfully removed skill: ${skill.name} (${skill.id})`);
   });
 
+// 10. `talon memory`
+const memoryCommand = program.command('memory').description('Manage long-term semantic facts & agent preferences');
+
+memoryCommand
+  .command('list')
+  .description('List stored semantic facts and knowledge items')
+  .option('-c, --category <cat>', 'Filter by fact category')
+  .option('-l, --limit <num>', 'Maximum facts to return', '50')
+  .action(async (options: { category?: string; limit: string }) => {
+    const { memory } = getComponents();
+    await memory.initialize();
+    const limit = parseInt(options.limit, 10);
+    const facts = await memory.listFacts({ category: options.category, limit });
+    await memory.close();
+
+    console.log(`\n🧠 Semantic Facts & Knowledge (${facts.length} items):`);
+    if (facts.length === 0) {
+      console.log('   No facts recorded. Use "talon memory add <key> <value>" to add one.');
+      return;
+    }
+
+    for (const fact of facts) {
+      console.log(`\n  • [${fact.category}] ${fact.key} (Confidence: ${fact.confidence})`);
+      console.log(`    Value: ${fact.value}`);
+      console.log(`    ID: ${fact.id} | Updated: ${new Date(fact.updatedAt).toISOString()}`);
+    }
+    console.log('');
+  });
+
+memoryCommand
+  .command('add <key> <value>')
+  .description('Save a new long-term semantic fact or user preference')
+  .option('-c, --category <cat>', 'Category of the fact', 'user_preference')
+  .option('--confidence <num>', 'Confidence score (0.0 to 1.0)', '1.0')
+  .action(async (key: string, value: string, options: { category: string; confidence: string }) => {
+    const { memory } = getComponents();
+    await memory.initialize();
+
+    const confidence = parseFloat(options.confidence);
+    const factId = `fact_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    await memory.saveFact({
+      id: factId,
+      category: options.category,
+      key,
+      value,
+      confidence,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    await memory.close();
+
+    console.log(`\n✅ Stored semantic fact:`);
+    console.log(`   ID:       ${factId}`);
+    console.log(`   Category: ${options.category}`);
+    console.log(`   Key:      ${key}`);
+    console.log(`   Value:    ${value}`);
+    console.log('💡 This knowledge is now continuously retrieved during Fast Path reasoning turns!\n');
+  });
+
+memoryCommand
+  .command('search <query>')
+  .description('Search semantic memory using full-text keyword matching')
+  .option('-c, --category <cat>', 'Filter by category')
+  .action(async (query: string, options: { category?: string }) => {
+    const { memory } = getComponents();
+    await memory.initialize();
+    const results = await memory.searchFacts(query, { category: options.category, topK: 10 });
+    await memory.close();
+
+    console.log(`\n🔍 Search Results for "${query}" (${results.length} found):`);
+    if (results.length === 0) {
+      console.log('   No matching facts found.');
+      return;
+    }
+    for (const fact of results) {
+      console.log(`  • [${fact.category}] ${fact.key} = "${fact.value}"`);
+    }
+    console.log('');
+  });
+
+memoryCommand
+  .command('remove <factId>')
+  .description('Delete a semantic fact by ID')
+  .action(async (factId: string) => {
+    const { memory } = getComponents();
+    await memory.initialize();
+    const deleted = await memory.deleteFact(factId);
+    await memory.close();
+
+    if (deleted) {
+      console.log(`🗑️ Successfully deleted fact: ${factId}`);
+    } else {
+      console.log(`❌ Fact not found: ${factId}`);
+    }
+  });
+
 program.parse(process.argv);

@@ -58,6 +58,18 @@ export interface EpisodicTrace {
   timestamp: number;
 }
 
+export interface SemanticFact {
+  id: string;
+  sessionId?: string;
+  category: string; // e.g. "user_preference", "domain_entity", "system_state"
+  key: string;
+  value: string;
+  confidence: number;
+  embedding?: number[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface HybridSearchResult<T> {
   item: T;
   score: number;
@@ -77,13 +89,20 @@ export interface IMemoryPort {
   initialize(): Promise<void>;
   close(): Promise<void>;
   
-  // Episodic Memory
+  // Episodic Memory (Traces)
   saveTrace(trace: EpisodicTrace): Promise<void>;
   getTracesBySession(sessionId: string, limit?: number): Promise<EpisodicTrace[]>;
   getRecentTraces(limit?: number): Promise<EpisodicTrace[]>;
   getFailedTraces(limit?: number): Promise<EpisodicTrace[]>;
 
-  // Procedural Memory
+  // Semantic Memory (Facts & Knowledge)
+  saveFact(fact: SemanticFact): Promise<void>;
+  getFact(key: string, category?: string): Promise<SemanticFact | null>;
+  listFacts(options?: { category?: string; sessionId?: string; limit?: number }): Promise<SemanticFact[]>;
+  searchFacts(query: string, options?: { category?: string; topK?: number }): Promise<SemanticFact[]>;
+  deleteFact(id: string): Promise<boolean>;
+
+  // Procedural Memory (Skills)
   saveSkill(skill: ProceduralSkill): Promise<void>;
   getSkill(idOrName: string): Promise<ProceduralSkill | null>;
   listSkills(): Promise<ProceduralSkill[]>;

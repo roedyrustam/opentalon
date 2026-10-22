@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { LibSqlMemoryAdapter } from '../libsql-adapter.js';
 import { cosineSimilarity, reciprocalRankFusion } from '../rrf.js';
-import { type EpisodicTrace, type ProceduralSkill } from '../types.js';
+import { type EpisodicTrace, type ProceduralSkill, type SemanticFact } from '../types.js';
 
 describe('Memory Package - RRF & Cosine Similarity', () => {
   it('calculates cosine similarity correctly', () => {
@@ -134,4 +134,64 @@ describe('LibSqlMemoryAdapter (In-Memory Engine)', () => {
     const recheck = await adapter.getSkill('fetch_weather');
     expect(recheck).toBeNull();
   });
+
+  it('saves, searches, lists, and deletes semantic facts', async () => {
+    const fact1: SemanticFact = {
+      id: 'fact-1',
+      sessionId: 'sess-pref',
+      category: 'user_preference',
+      key: 'preferred_language',
+      value: 'id-ID',
+      confidence: 0.95,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    const fact2: SemanticFact = {
+      id: 'fact-2',
+      sessionId: 'sess-pref',
+      category: 'user_preference',
+      key: 'currency_default',
+      value: 'IDR',
+      confidence: 1.0,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    const fact3: SemanticFact = {
+      id: 'fact-3',
+      category: 'system_entity',
+      key: 'gateway_merchant_id',
+      value: 'MCH_994821',
+      confidence: 1.0,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    await adapter.saveFact(fact1);
+    await adapter.saveFact(fact2);
+    await adapter.saveFact(fact3);
+
+    // Get specific fact
+    const got = await adapter.getFact('preferred_language', 'user_preference');
+    expect(got).not.toBeNull();
+    expect(got?.value).toBe('id-ID');
+
+    // List facts by category
+    const userPrefs = await adapter.listFacts({ category: 'user_preference' });
+    expect(userPrefs).toHaveLength(2);
+
+    // Search facts
+    const searchRes = await adapter.searchFacts('currency IDR');
+    expect(searchRes.length).toBeGreaterThan(0);
+    expect(searchRes[0].key).toBe('currency_default');
+
+    // Delete fact
+    const deleted = await adapter.deleteFact('fact-1');
+    expect(deleted).toBe(true);
+
+    const recheck = await adapter.getFact('preferred_language');
+    expect(recheck).toBeNull();
+  });
 });
+

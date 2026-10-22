@@ -132,4 +132,34 @@ export default async function run(args) {
     expect(inDb).not.toBeNull();
     expect(inDb?.name).toBe('multiply_numbers');
   });
+
+  it('retrieves relevant semantic facts and includes them in fast path output', async () => {
+    // Seed a semantic fact in memory
+    await memory.saveFact({
+      id: 'fact-pref-1',
+      category: 'user_preference',
+      key: 'preferred_currency',
+      value: 'IDR',
+      confidence: 1.0,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    mockLLM.mockResponse = {
+      content: 'Using default currency IDR for conversion.',
+      tokensUsed: { promptTokens: 50, completionTokens: 20, totalTokens: 70 },
+      model: 'mock-model',
+    };
+
+    const result = await router.executeFastPath({
+      sessionId: 'session-facts',
+      input: 'Convert currency amount',
+    });
+
+    expect(result.retrievedFacts).toBeDefined();
+    expect(result.retrievedFacts?.length).toBeGreaterThan(0);
+    expect(result.retrievedFacts?.[0].key).toBe('preferred_currency');
+    expect(result.retrievedFacts?.[0].value).toBe('IDR');
+  });
 });
+

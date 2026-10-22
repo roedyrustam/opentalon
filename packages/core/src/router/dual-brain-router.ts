@@ -93,6 +93,10 @@ export class DualBrainRouter extends EventEmitter {
     const searchResults = await this.memory.searchSkillsHybrid(input, queryEmbedding, topK);
     const retrievedSkills = searchResults.map((r) => r.item);
 
+    // 2b. Retrieve relevant Semantic Facts (Knowledge & Preferences)
+    const topKFacts = options.topKFacts ?? 3;
+    const retrievedFacts = await this.memory.searchFacts(input, { topK: topKFacts });
+
     // 3. Convert retrieved skills to Tool Definitions
     const tools: ToolDefinition[] = retrievedSkills.map((skill) => ({
       name: skill.name,
@@ -105,9 +109,15 @@ export class DualBrainRouter extends EventEmitter {
       },
     }));
 
-    // 4. Token Budget Compression (<1,500 tokens)
-    const systemPrompt =
+    // 4. Token Budget Compression (<1,500 tokens) with Prefix Pinning
+    let systemPrompt =
       'You are OpenTalon, a precision autonomous agent. Use available tools when appropriate.';
+
+    if (retrievedFacts.length > 0) {
+      const factSnippets = retrievedFacts.map((f) => `• [${f.category}] ${f.key}: ${f.value}`).join('\n');
+      systemPrompt += `\n\nVerified Knowledge Context:\n${factSnippets}`;
+    }
+
     const incomingMessages: ChatMessage[] = options.history ? [...options.history] : [];
     incomingMessages.push({ role: 'user', content: input });
 
@@ -149,11 +159,27 @@ export class DualBrainRouter extends EventEmitter {
             durationMs,
           });
 
-          // If LLM returned empty content with tool call, format result
-          if (!finalOutput) {
-            finalOutput = sandboxedResult.success
-              ? `Executed ${tc.name}: ${JSON.stringify(sandboxedResult.data)}`
-              : `Execution of ${tc.name} failed: ${sandboxedResult.error}`;
+          // Adaptive Tool Error Self-Correction
+          if (!sandboxedResult.success) {
+            try {
+              const repair = await this.llm.generateContent({
+                systemInstruction: systemPrompt,
+                messages: [
+                  ...budgetedMessages,
+                  { role: 'assistant', content: `Attempted tool ${tc.name}` },
+                  {
+                    role: 'user',
+                    content: `[Sandbox Error] ${tc.name} execution failed: ${sandboxedResult.error}. Provide helpful resolution.`,
+                  },
+                ],
+                maxTokens: 300,
+              });
+              finalOutput = repair.content || `Execution of ${tc.name} failed: ${sandboxedResult.error}`;
+            } catch {
+              finalOutput = `Execution of ${tc.name} failed: ${sandboxedResult.error}`;
+            }
+          } else if (!finalOutput) {
+            finalOutput = `Executed ${tc.name}: ${JSON.stringify(sandboxedResult.data)}`;
           }
         }
       }
@@ -192,6 +218,7 @@ export class DualBrainRouter extends EventEmitter {
     return {
       output: finalOutput,
       retrievedSkills,
+      retrievedFacts,
       toolCallsMade,
       tokensUsed: llmResponse.tokensUsed,
       latencyMs,

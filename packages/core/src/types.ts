@@ -1,5 +1,5 @@
-import { type ProceduralSkill, type IMemoryPort } from '@opentalon/memory';
-export type { EpisodicTrace, ProceduralSkill } from '@opentalon/memory';
+import { type ProceduralSkill, type SemanticFact, type IMemoryPort } from '@opentalon/memory';
+export type { EpisodicTrace, ProceduralSkill, SemanticFact } from '@opentalon/memory';
 import { type ISkillSandbox, type SkillSynthesizer } from '@opentalon/skill-engine';
 
 export interface ChatMessage {
@@ -63,12 +63,14 @@ export interface FastPathOptions {
   input: string;
   history?: ChatMessage[];
   topKSkills?: number;
+  topKFacts?: number;
   maxTokensBudget?: number;
 }
 
 export interface FastPathResult {
   output: string;
   retrievedSkills: ProceduralSkill[];
+  retrievedFacts?: SemanticFact[];
   toolCallsMade: Array<{
     toolName: string;
     args: Record<string, unknown>;

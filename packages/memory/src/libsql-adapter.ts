@@ -3,6 +3,7 @@ import {
   type IMemoryPort,
   type MemoryConfig,
   type EpisodicTrace,
+  type SemanticFact,
   type ProceduralSkill,
   type HybridSearchResult,
   type SkillCapabilities,
@@ -81,6 +82,45 @@ export class LibSqlMemoryAdapter implements IMemoryPort {
     } catch {
       // In minimal edge environments where FTS5 extension is not compiled,
       // fallback to LIKE query will be performed automatically.
+    }
+
+    // Semantic Facts Table (Long-Term Knowledge & User Preferences)
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS semantic_facts (
+        id TEXT PRIMARY KEY,
+        session_id TEXT,
+        category TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        confidence REAL NOT NULL,
+        embedding TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_facts_category ON semantic_facts(category);
+    `);
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_facts_key ON semantic_facts(key);
+    `);
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_facts_session ON semantic_facts(session_id);
+    `);
+
+    try {
+      await this.client.execute(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS fts_facts USING fts5(
+          id UNINDEXED,
+          category,
+          key,
+          value,
+          tokenize = 'unicode61'
+        );
+      `);
+    } catch {
+      // Fallback to LIKE query if FTS5 is not available
     }
 
     this.isInitialized = true;
@@ -162,6 +202,165 @@ export class LibSqlMemoryAdapter implements IMemoryPort {
     });
 
     return result.rows.map((r) => this.mapRowToTrace(r));
+  }
+
+  // --- Semantic Fact Store Methods ---
+
+  public async saveFact(fact: SemanticFact): Promise<void> {
+    await this.initialize();
+    await this.client.execute({
+      sql: `
+        INSERT INTO semantic_facts (
+          id, session_id, category, key, value, confidence, embedding, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          value = excluded.value,
+          confidence = excluded.confidence,
+          embedding = excluded.embedding,
+          updated_at = excluded.updated_at;
+      `,
+      args: [
+        fact.id,
+        fact.sessionId ?? null,
+        fact.category,
+        fact.key,
+        fact.value,
+        fact.confidence,
+        fact.embedding ? JSON.stringify(fact.embedding) : null,
+        fact.createdAt,
+        fact.updatedAt,
+      ],
+    });
+
+    try {
+      await this.client.execute({
+        sql: `DELETE FROM fts_facts WHERE id = ?;`,
+        args: [fact.id],
+      });
+      await this.client.execute({
+        sql: `INSERT INTO fts_facts (id, category, key, value) VALUES (?, ?, ?, ?);`,
+        args: [fact.id, fact.category, fact.key, fact.value],
+      });
+    } catch {
+      // Ignore if FTS5 not available
+    }
+  }
+
+  public async getFact(key: string, category?: string): Promise<SemanticFact | null> {
+    await this.initialize();
+    const sql = category
+      ? `SELECT * FROM semantic_facts WHERE key = ? AND category = ? LIMIT 1;`
+      : `SELECT * FROM semantic_facts WHERE key = ? LIMIT 1;`;
+    const args = category ? [key, category] : [key];
+
+    const result = await this.client.execute({ sql, args });
+    if (result.rows.length === 0) return null;
+    return this.mapRowToFact(result.rows[0]);
+  }
+
+  public async listFacts(options?: {
+    category?: string;
+    sessionId?: string;
+    limit?: number;
+  }): Promise<SemanticFact[]> {
+    await this.initialize();
+    const conditions: string[] = [];
+    const args: (string | number)[] = [];
+
+    if (options?.category) {
+      conditions.push('category = ?');
+      args.push(options.category);
+    }
+    if (options?.sessionId) {
+      conditions.push('session_id = ?');
+      args.push(options.sessionId);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const limit = options?.limit ?? 100;
+    args.push(limit);
+
+    const result = await this.client.execute({
+      sql: `SELECT * FROM semantic_facts ${whereClause} ORDER BY updated_at DESC LIMIT ?;`,
+      args,
+    });
+
+    return result.rows.map((r) => this.mapRowToFact(r));
+  }
+
+  public async searchFacts(
+    query: string,
+    options?: { category?: string; topK?: number }
+  ): Promise<SemanticFact[]> {
+    await this.initialize();
+    const topK = options?.topK ?? 5;
+
+    try {
+      const cleanQuery = query
+        .replace(/["*+\-^~()]/g, ' ')
+        .trim()
+        .split(/\s+/)
+        .filter((w) => w.length > 1)
+        .join(' OR ');
+
+      if (cleanQuery.length > 0) {
+        const catFilter = options?.category ? 'AND f.category = ?' : '';
+        const args = options?.category ? [cleanQuery, options.category, topK] : [cleanQuery, topK];
+
+        const ftsResult = await this.client.execute({
+          sql: `
+            SELECT s.* FROM fts_facts f
+            JOIN semantic_facts s ON f.id = s.id
+            WHERE fts_facts MATCH ? ${catFilter}
+            ORDER BY bm25(fts_facts) ASC
+            LIMIT ?;
+          `,
+          args,
+        });
+
+        if (ftsResult.rows.length > 0) {
+          return ftsResult.rows.map((r) => this.mapRowToFact(r));
+        }
+      }
+    } catch {
+      // Fallback to LIKE
+    }
+
+    const catClause = options?.category ? 'AND category = ?' : '';
+    const args = options?.category
+      ? [`%${query}%`, `%${query}%`, options.category, topK]
+      : [`%${query}%`, `%${query}%`, topK];
+
+    const fallbackResult = await this.client.execute({
+      sql: `
+        SELECT * FROM semantic_facts
+        WHERE (key LIKE ? OR value LIKE ?) ${catClause}
+        ORDER BY updated_at DESC
+        LIMIT ?;
+      `,
+      args,
+    });
+
+    return fallbackResult.rows.map((r) => this.mapRowToFact(r));
+  }
+
+  public async deleteFact(id: string): Promise<boolean> {
+    await this.initialize();
+    const result = await this.client.execute({
+      sql: `DELETE FROM semantic_facts WHERE id = ?;`,
+      args: [id],
+    });
+
+    try {
+      await this.client.execute({
+        sql: `DELETE FROM fts_facts WHERE id = ?;`,
+        args: [id],
+      });
+    } catch {
+      // Ignore
+    }
+
+    return (result.rowsAffected ?? 0) > 0;
   }
 
   // --- Procedural Store Methods ---
@@ -364,6 +563,20 @@ export class LibSqlMemoryAdapter implements IMemoryPort {
       code: String(row.code),
       testCases: row.test_cases ? String(row.test_cases) : undefined,
       hash: String(row.hash),
+      embedding: row.embedding ? JSON.parse(String(row.embedding)) : undefined,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
+    };
+  }
+
+  private mapRowToFact(row: Record<string, unknown>): SemanticFact {
+    return {
+      id: String(row.id),
+      sessionId: row.session_id ? String(row.session_id) : undefined,
+      category: String(row.category),
+      key: String(row.key),
+      value: String(row.value),
+      confidence: Number(row.confidence ?? 1.0),
       embedding: row.embedding ? JSON.parse(String(row.embedding)) : undefined,
       createdAt: Number(row.created_at),
       updatedAt: Number(row.updated_at),

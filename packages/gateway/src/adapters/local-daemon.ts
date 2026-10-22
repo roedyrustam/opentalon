@@ -70,6 +70,7 @@ export class LocalDaemonAdapter {
             const memory = this.router.getMemory();
             const skills = await memory.listSkills();
             const traces = await memory.getRecentTraces(100);
+            const facts = await memory.listFacts({ limit: 1000 });
             const avgLatency =
               traces.length > 0
                 ? traces.reduce((acc, t) => acc + t.latencyMs, 0) / traces.length
@@ -80,6 +81,7 @@ export class LocalDaemonAdapter {
               JSON.stringify({
                 skillsCount: skills.length,
                 tracesCount: traces.length,
+                factsCount: facts.length,
                 avgLatencyMs: Math.round(avgLatency),
               })
             );
@@ -113,6 +115,56 @@ export class LocalDaemonAdapter {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: String(err) }));
           }
+          return;
+        }
+
+        // 5b. Semantic Facts API
+        if (req.method === 'GET' && url.pathname === '/api/facts') {
+          try {
+            const category = url.searchParams.get('category') || undefined;
+            const facts = await this.router.getMemory().listFacts({ category });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(facts));
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+          return;
+        }
+
+        // 5c. Save Semantic Fact API
+        if (req.method === 'POST' && url.pathname === '/api/facts') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const payload = JSON.parse(body) as {
+                id?: string;
+                category: string;
+                key: string;
+                value: string;
+                confidence?: number;
+              };
+              const factId = payload.id || `fact_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+              const fact = {
+                id: factId,
+                category: payload.category,
+                key: payload.key,
+                value: payload.value,
+                confidence: payload.confidence ?? 1.0,
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+              };
+              await this.router.getMemory().saveFact(fact);
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify(fact));
+            } catch (err: unknown) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: String(err) }));
+            }
+          });
           return;
         }
 

@@ -254,6 +254,34 @@ Runs an adversarial Critic-Validator Loop with zero-tolerance quality gates and 
 talon swarm critic "Implement cryptographic token signer" -r 3
 ```
 
+#### 17. `talon memory list`
+Lists all long-term semantic facts, user preferences, and domain knowledge entities stored in the SQLite database.
+
+```bash
+talon memory list --category user_preference
+```
+
+#### 18. `talon memory add <key> <value>`
+Commits a new persistent semantic fact or user preference into libSQL memory.
+
+```bash
+talon memory add preferred_currency IDR --category user_preference
+```
+
+#### 19. `talon memory search <query>`
+Searches stored facts and knowledge using FTS5 full-text keyword indexing.
+
+```bash
+talon memory search "currency"
+```
+
+#### 20. `talon memory remove <factId>`
+Deletes a semantic fact from long-term memory.
+
+```bash
+talon memory remove fact_1719283921_a83f9
+```
+
 ---
 
 ## Dual-Brain Protocol (Fast Path vs Slow Path)
@@ -420,9 +448,9 @@ OpenTalon includes a comprehensive test suite across all monorepo modules using 
 pnpm test
 ```
 
-### Test Coverage Highlights (60 Tests Across 11 Suites)
-- **`@opentalon/memory`**: Verified FTS5 full-text indexing, vector cosine distance, RRF score ordering, and trace persistence.
-- **`@opentalon/core`**: Verified Fast Path token budget truncation (<1,500 tokens), LLM tool-calling loops, mock driver fallback, Circuit Breaker self-healing, FinOps hourly throttle, and Swarm multi-agent orchestration (Fan-Out/Fan-In, Pipeline Saga, Critic-Validator Loop).
-- **`@opentalon/skill-engine`**: Verified `SKILL.md` parsing, zero-trust sandbox execution, capability violation rejection, timeout interception, and semantic versioning.
-- **`@opentalon/gateway`**: Verified local daemon HTTP routing (`/health`, `/v1/chat`, `/v1/stream`), error handling, serverless edge payloads, Web Cockpit Dashboard, Swarm dispatcher, and MCP JSON-RPC 2.0 endpoints.
+### Test Coverage Highlights (64 Tests Across 11 Suites)
+- **`@opentalon/memory`**: Verified FTS5 full-text indexing, vector cosine distance, RRF score ordering, trace persistence, and semantic facts knowledge store (save, list, search, delete).
+- **`@opentalon/core`**: Verified Fast Path token budget truncation (<1,500 tokens), semantic facts auto-retrieval and system prefix injection, adaptive tool error self-correction, LLM tool-calling loops, mock driver fallback, Circuit Breaker self-healing, FinOps hourly throttle, and Swarm multi-agent orchestration (Fan-Out/Fan-In, Pipeline Saga, Critic-Validator Loop).
+- **`@opentalon/skill-engine`**: Verified `SKILL.md` parsing, zero-trust sandbox execution, capability violation rejection, timeout interception, semantic versioning, and full verification across **10 production skills** in the gallery.
+- **`@opentalon/gateway`**: Verified local daemon HTTP routing (`/health`, `/v1/chat`, `/v1/stream`), error handling, serverless edge payloads, Web Cockpit Dashboard, Swarm dispatcher, facts API, and MCP JSON-RPC 2.0 endpoints.
 - **MCP Protocol & Bridge**: Verified Model Context Protocol handshake, tools/list, tools/call sandboxing, resources/list traces, and `McpToolBridge` automatic remote tool import.

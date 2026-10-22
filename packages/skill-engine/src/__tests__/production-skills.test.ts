@@ -17,6 +17,8 @@ describe('Production Skills Gallery - Verification Suite', () => {
     'math-stats-calculator.md',
     'doku-payment-checkout.md',
     'rag-document-retriever.md',
+    'web-content-extractor.md',
+    'json-schema-guard.md',
   ];
 
   for (const filename of skillFiles) {
