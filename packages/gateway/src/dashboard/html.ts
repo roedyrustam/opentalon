@@ -781,6 +781,186 @@ export function getDashboardHtml(): string {
       return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
+    // Swarm Topologies Controller
+    let activeSwarmTopology = 'fan_out_fan_in';
+
+    function selectSwarmTopology(top) {
+      activeSwarmTopology = top;
+      const lbl = document.getElementById('swarm-selected-label');
+      if (lbl) lbl.innerText = top;
+      const f = document.getElementById('swarm-top-fanout');
+      const s = document.getElementById('swarm-top-saga');
+      const c = document.getElementById('swarm-top-critic');
+      if (f) f.style.borderColor = top === 'fan_out_fan_in' ? 'var(--primary)' : 'var(--card-border)';
+      if (s) s.style.borderColor = top === 'pipeline_saga' ? 'var(--primary)' : 'var(--card-border)';
+      if (c) c.style.borderColor = top === 'critic_validator_loop' ? 'var(--primary)' : 'var(--card-border)';
+    }
+
+    async function runSwarmTask() {
+      const task = document.getElementById('swarm-task-input').value.trim();
+      if (!task) {
+        alert('Please specify a task objective for the swarm.');
+        return;
+      }
+
+      const runBtn = document.getElementById('swarm-run-btn');
+      const resultsCard = document.getElementById('swarm-results-card');
+      const badge = document.getElementById('swarm-telemetry-badge');
+      const subContainer = document.getElementById('swarm-subagents-container');
+      const finalOut = document.getElementById('swarm-final-output');
+
+      runBtn.disabled = true;
+      runBtn.innerText = 'Swarm Executing...';
+      resultsCard.style.display = 'block';
+      badge.className = 'badge badge-purple';
+      badge.innerText = 'Swarm In Flight...';
+      subContainer.innerHTML = '<div style="color:var(--text-muted)">Coordinating subagents in parallel...</div>';
+      finalOut.innerText = 'Synthesizing verified solution...';
+
+      const start = Date.now();
+      try {
+        const res = await fetch('/api/swarm/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            topology: activeSwarmTopology,
+            task: task,
+          }),
+        });
+
+        const data = await res.json();
+        const duration = Date.now() - start;
+
+        if (data.error) {
+          badge.className = 'badge badge-purple';
+          badge.innerText = 'Failed';
+          finalOut.innerText = 'Error: ' + data.error;
+          return;
+        }
+
+        badge.className = 'badge badge-success';
+        badge.innerText = 'Completed in ' + duration + 'ms';
+
+        if (data.subagentResults && data.subagentResults.length > 0) {
+          subContainer.innerHTML = data.subagentResults.map(sub => \`
+            <div style="background: #0d131f; border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                <strong style="color: #60a5fa;">\${escapeHtml(sub.role)}</strong>
+                <span class="badge badge-blue tabular-nums">\${sub.durationMs}ms</span>
+              </div>
+              <div style="font-size: 0.825rem; color: #d1d5db; max-height: 140px; overflow-y: auto; white-space: pre-wrap; font-family: var(--font-mono);">\${escapeHtml(sub.output)}</div>
+            </div>
+          \`).join('');
+        } else {
+          subContainer.innerHTML = '<div style="color:var(--text-muted)">Single pipeline synthesis</div>';
+        }
+
+        finalOut.innerText = data.finalOutput || JSON.stringify(data, null, 2);
+      } catch (err) {
+        badge.innerText = 'Error';
+        finalOut.innerText = 'Execution failure: ' + err.message;
+      } finally {
+        runBtn.disabled = false;
+        runBtn.innerText = 'Launch Swarm Mission';
+      }
+    }
+
+    // MCP Controller
+    async function loadMcpTools() {
+      const container = document.getElementById('mcp-tools-list');
+      if (!container) return;
+      container.innerHTML = '<div style="color: var(--text-muted);">Fetching registered MCP tools...</div>';
+
+      try {
+        const res = await fetch('/api/mcp/tools');
+        const data = await res.json();
+        const tools = data.tools || [];
+
+        if (tools.length === 0) {
+          container.innerHTML = '<div style="color: var(--text-muted);">No MCP tools exposed yet. Register procedural skills to expose them.</div>';
+          return;
+        }
+
+        container.innerHTML = tools.map(t => \`
+          <div style="background: #0d131f; border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <strong style="color: #34d399; font-family: var(--font-mono);">\${escapeHtml(t.name)}</strong>
+              <button class="btn" style="padding: 0.2rem 0.5rem; font-size: 0.7rem;" onclick="callMcpToolPrompt('\${escapeHtml(t.name)}')">Call Tool</button>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">\${escapeHtml(t.description)}</div>
+          </div>
+        \`).join('');
+      } catch (err) {
+        container.innerHTML = '<div style="color: #ef4444;">Failed to load MCP tools: ' + err.message + '</div>';
+      }
+    }
+
+    async function callMcpToolPrompt(toolName) {
+      const argsStr = prompt('Enter JSON arguments for MCP tool "' + toolName + '":', '{}');
+      if (argsStr === null) return;
+      let args = {};
+      try {
+        args = JSON.parse(argsStr);
+      } catch (e) {
+        alert('Invalid JSON: ' + e.message);
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/mcp/rpc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: Date.now(),
+            method: 'tools/call',
+            params: { name: toolName, arguments: args }
+          })
+        });
+        const rpcRes = await res.json();
+        alert('MCP Result:\\n' + JSON.stringify(rpcRes, null, 2));
+      } catch (e) {
+        alert('RPC Error: ' + e.message);
+      }
+    }
+
+    async function importMcpTools() {
+      const url = document.getElementById('mcp-import-url').value.trim();
+      const prefix = document.getElementById('mcp-import-prefix').value.trim() || 'mcp';
+      const statusDiv = document.getElementById('mcp-import-status');
+      if (!url) {
+        alert('Please enter a valid remote MCP endpoint URL');
+        return;
+      }
+
+      statusDiv.style.display = 'block';
+      statusDiv.style.color = '#38bdf8';
+      statusDiv.innerText = 'Connecting to ' + url + ' and discovering tools...';
+
+      try {
+        const res = await fetch('/api/mcp/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, prefix })
+        });
+        const data = await res.json();
+        if (data.error) {
+          statusDiv.style.color = '#ef4444';
+          statusDiv.innerText = 'Import error: ' + data.error;
+          return;
+        }
+
+        statusDiv.style.color = '#34d399';
+        statusDiv.innerText = 'Successfully imported ' + (data.importedSkills ? data.importedSkills.length : 0) + ' remote tools!';
+        loadMcpTools();
+        loadSkills();
+        loadStats();
+      } catch (e) {
+        statusDiv.style.color = '#ef4444';
+        statusDiv.innerText = 'Import failure: ' + e.message;
+      }
+    }
+
     // 3D Talon Core Mini Hologram
     function init3DHero() {
       const cvs = document.getElementById('talon3DHeroCanvas');

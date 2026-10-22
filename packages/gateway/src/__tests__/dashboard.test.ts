@@ -51,6 +51,10 @@ describe('Gateway - Embedded Web Dashboard & Cockpit APIs', () => {
     const html = await res.text();
     expect(html).toContain('OpenTalon — Dual-Brain AI Agent Cockpit');
     expect(html).toContain('brand-badge');
+    expect(html).toContain('Swarm Topologies');
+    expect(html).toContain('MCP Hub');
+    expect(html).toContain('swarm-top-fanout');
+    expect(html).toContain('mcp-tools-list');
   });
 
   it('returns statistics via GET /api/stats', async () => {

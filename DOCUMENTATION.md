@@ -205,6 +205,55 @@ Deletes a skill from both the procedural memory repository and the full-text sea
 talon skills remove doku_payment_checkout
 ```
 
+#### 10. `talon mcp serve`
+Starts the OpenTalon Model Context Protocol server over Stdio, compliant with specification 2024-11-05 for instant plug-and-play connection with Claude Desktop, Cursor, and Antigravity.
+
+```bash
+talon mcp serve
+```
+
+#### 11. `talon mcp list`
+Lists all procedural tools and resources currently exposed by the OpenTalon MCP server.
+
+```bash
+talon mcp list
+```
+
+#### 12. `talon mcp call <toolName> [argsJson]`
+Directly invokes an MCP tool through OpenTalon's JSON-RPC 2.0 handler.
+
+```bash
+talon mcp call doku_payment_checkout '{"action":"generate_checkout","amount":250000}'
+```
+
+#### 13. `talon mcp import <endpointUrl>`
+Discovers tools from an external HTTP MCP server and automatically compiles sandboxed procedural skills into local memory via `McpToolBridge`.
+
+```bash
+talon mcp import http://127.0.0.1:8000/rpc --prefix ext
+```
+
+#### 14. `talon swarm fanout <task>`
+Runs a parallel multi-agent swarm delegation (System Architect, Security Sentinel, Fullstack Craftsman) with unified consensus synthesis.
+
+```bash
+talon swarm fanout "Design high-concurrency payment webhook processor"
+```
+
+#### 15. `talon swarm saga <task>`
+Runs a sequential pipeline saga with dependent stages (Discovery &rarr; Contracts &rarr; Implementation).
+
+```bash
+talon swarm saga "Build automated refund reconciliation module"
+```
+
+#### 16. `talon swarm critic <task>`
+Runs an adversarial Critic-Validator Loop with zero-tolerance quality gates and automated self-healing critique retries.
+
+```bash
+talon swarm critic "Implement cryptographic token signer" -r 3
+```
+
 ---
 
 ## Dual-Brain Protocol (Fast Path vs Slow Path)
@@ -371,8 +420,9 @@ OpenTalon includes a comprehensive test suite across all monorepo modules using 
 pnpm test
 ```
 
-### Test Coverage Highlights
+### Test Coverage Highlights (60 Tests Across 11 Suites)
 - **`@opentalon/memory`**: Verified FTS5 full-text indexing, vector cosine distance, RRF score ordering, and trace persistence.
-- **`@opentalon/core`**: Verified Fast Path token budget truncation (<1,500 tokens), LLM tool-calling loops, and mock driver fallback.
+- **`@opentalon/core`**: Verified Fast Path token budget truncation (<1,500 tokens), LLM tool-calling loops, mock driver fallback, Circuit Breaker self-healing, FinOps hourly throttle, and Swarm multi-agent orchestration (Fan-Out/Fan-In, Pipeline Saga, Critic-Validator Loop).
 - **`@opentalon/skill-engine`**: Verified `SKILL.md` parsing, zero-trust sandbox execution, capability violation rejection, timeout interception, and semantic versioning.
-- **`@opentalon/gateway`**: Verified local daemon HTTP endpoint routing (`/health`, `/v1/chat`), error handling, and serverless edge payloads.
+- **`@opentalon/gateway`**: Verified local daemon HTTP routing (`/health`, `/v1/chat`, `/v1/stream`), error handling, serverless edge payloads, Web Cockpit Dashboard, Swarm dispatcher, and MCP JSON-RPC 2.0 endpoints.
+- **MCP Protocol & Bridge**: Verified Model Context Protocol handshake, tools/list, tools/call sandboxing, resources/list traces, and `McpToolBridge` automatic remote tool import.
