@@ -229,5 +229,88 @@ export default async function run(args) {
     const importJson = (await importRes.json()) as { importedSkills: number };
     expect(importJson.importedSkills).toBeDefined();
   });
+
+  it('manages cron automations via /api/cron/jobs and /api/cron/logs', async () => {
+    // 1. Create scheduled job
+    const createRes = await fetch(`http://127.0.0.1:${testPort}/api/cron/jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'gateway-cron-test',
+        cron: '@hourly',
+        actionType: 'prompt',
+        actionPayload: { prompt: 'Gateway heartbeat check' },
+      }),
+    });
+    expect(createRes.status).toBe(201);
+    const job = (await createRes.json()) as { id: string; name: string; cron: string };
+    expect(job.name).toBe('gateway-cron-test');
+    expect(job.cron).toBe('@hourly');
+
+    // 2. List jobs
+    const listRes = await fetch(`http://127.0.0.1:${testPort}/api/cron/jobs`);
+    expect(listRes.status).toBe(200);
+    const jobs = (await listRes.json()) as Array<{ id: string; name: string }>;
+    expect(jobs.some((j) => j.name === 'gateway-cron-test')).toBe(true);
+
+    // 3. Trigger job manually
+    const triggerRes = await fetch(
+      `http://127.0.0.1:${testPort}/api/cron/jobs/${job.id}/trigger`,
+      { method: 'POST' }
+    );
+    expect(triggerRes.status).toBe(200);
+    const log = (await triggerRes.json()) as { status: string; tokensUsed: number };
+    expect(log.status).toBe('success');
+
+    // 4. Toggle pause
+    const toggleRes = await fetch(
+      `http://127.0.0.1:${testPort}/api/cron/jobs/${job.id}/toggle`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: false }),
+      }
+    );
+    expect(toggleRes.status).toBe(200);
+    const toggled = (await toggleRes.json()) as { status: string };
+    expect(toggled.status).toBe('paused');
+
+    // 5. Query execution logs
+    const logsRes = await fetch(
+      `http://127.0.0.1:${testPort}/api/cron/logs?jobId=${job.id}`
+    );
+    expect(logsRes.status).toBe(200);
+    const logs = (await logsRes.json()) as Array<{ jobId: string; status: string }>;
+    expect(logs.length).toBeGreaterThanOrEqual(1);
+    expect(logs[0].status).toBe('success');
+
+    // 6. Delete job
+    const delRes = await fetch(
+      `http://127.0.0.1:${testPort}/api/cron/jobs/${job.id}`,
+      { method: 'DELETE' }
+    );
+    expect(delRes.status).toBe(200);
+    const delJson = (await delRes.json()) as { success: boolean };
+    expect(delJson.success).toBe(true);
+  });
+
+  it('handles inbound webhook events via POST /api/webhooks/:name', async () => {
+    const webhookRes = await fetch(
+      `http://127.0.0.1:${testPort}/api/webhooks/github_push`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repository: 'opentalon',
+          commit: 'feat: add background daemon',
+        }),
+      }
+    );
+
+    expect(webhookRes.status).toBe(200);
+    const resJson = (await webhookRes.json()) as { success: boolean; event: string };
+    expect(resJson.success).toBe(true);
+    expect(resJson.event).toBe('github_push');
+  });
 });
 

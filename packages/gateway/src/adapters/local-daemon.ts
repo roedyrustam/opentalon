@@ -1,12 +1,14 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import {
   DualBrainRouter,
   McpServer,
   McpClientAdapter,
   McpToolBridge,
   SwarmDirector,
+  CronScheduler,
 } from '@opentalon/core';
 import { type GatewayRequestPayload, type GatewayResponsePayload } from '../types.js';
 import { getDashboardHtml } from '../dashboard/html.js';
@@ -17,6 +19,8 @@ export interface LocalDaemonOptions {
   port?: number;
   host?: string;
   enableDashboard?: boolean;
+  scheduler?: CronScheduler;
+  webhookSecret?: string;
 }
 
 export class LocalDaemonAdapter {
@@ -27,6 +31,8 @@ export class LocalDaemonAdapter {
   private sseAdapter: SseStreamAdapter;
   private mcpServer: McpServer;
   private swarmDirector: SwarmDirector;
+  private scheduler: CronScheduler;
+  private webhookSecret?: string;
 
   constructor(router: DualBrainRouter, options: LocalDaemonOptions = {}) {
     this.router = router;
@@ -35,6 +41,22 @@ export class LocalDaemonAdapter {
     this.sseAdapter = new SseStreamAdapter(router);
     this.mcpServer = new McpServer(router.getMemory(), router.getSandbox());
     this.swarmDirector = new SwarmDirector(router.getLLM());
+    this.webhookSecret = options.webhookSecret ?? process.env.TALON_WEBHOOK_SECRET;
+
+    this.scheduler =
+      options.scheduler ||
+      new CronScheduler({
+        memory: router.getMemory(),
+        router,
+        sandbox: router.getSandbox(),
+        onNotification: (evt) => {
+          this.router.emit('cron:notification', evt);
+        },
+      });
+  }
+
+  public getScheduler(): CronScheduler {
+    return this.scheduler;
   }
 
   public start(): Promise<number> {
@@ -685,12 +707,15 @@ export class LocalDaemonAdapter {
           const onSlowError = (err: any) => sendSSE('evolution_error', { message: String(err) });
           const onSkill = (skill: any) =>
             sendSSE('skill_registered', { name: skill.name, version: skill.version });
+          const onCronNotification = (evt: any) =>
+            sendSSE('cron_notification', evt);
 
           this.router.on('trace:emitted', onTrace);
           this.router.on('slowpath:started', onSlowStarted);
           this.router.on('slowpath:completed', onSlowCompleted);
           this.router.on('slowpath:error', onSlowError);
           this.router.on('skill:registered', onSkill);
+          this.router.on('cron:notification', onCronNotification);
 
           req.on('close', () => {
             this.router.off('trace:emitted', onTrace);
@@ -698,6 +723,216 @@ export class LocalDaemonAdapter {
             this.router.off('slowpath:completed', onSlowCompleted);
             this.router.off('slowpath:error', onSlowError);
             this.router.off('skill:registered', onSkill);
+            this.router.off('cron:notification', onCronNotification);
+          });
+          return;
+        }
+
+        // 16. Cron Jobs API: List All Jobs
+        if (req.method === 'GET' && url.pathname === '/api/cron/jobs') {
+          try {
+            const jobs = await this.scheduler.getJobs();
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(jobs));
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+          return;
+        }
+
+        // 17. Cron Jobs API: Register New Job
+        if (req.method === 'POST' && url.pathname === '/api/cron/jobs') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const payload = JSON.parse(body);
+              if (!payload.name || !payload.cron || !payload.actionType) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Missing name, cron, or actionType' }));
+                return;
+              }
+              const job = await this.scheduler.registerJob(payload);
+              res.writeHead(201, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify(job));
+            } catch (err: unknown) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: String(err) }));
+            }
+          });
+          return;
+        }
+
+        // 18. Cron Jobs API: Trigger Job Immediately
+        const triggerMatch = url.pathname.match(/^\/api\/cron\/jobs\/([^/]+)\/trigger$/);
+        if (req.method === 'POST' && triggerMatch) {
+          const jobId = decodeURIComponent(triggerMatch[1]);
+          try {
+            const log = await this.scheduler.triggerJob(jobId);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(log));
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+          return;
+        }
+
+        // 19. Cron Jobs API: Toggle Pause / Resume
+        const toggleMatch = url.pathname.match(/^\/api\/cron\/jobs\/([^/]+)\/toggle$/);
+        if (req.method === 'POST' && toggleMatch) {
+          const jobId = decodeURIComponent(toggleMatch[1]);
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const parsed = body ? JSON.parse(body) : {};
+              const job = await this.scheduler.toggleJob(jobId, parsed.active);
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify(job));
+            } catch (err: unknown) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: String(err) }));
+            }
+          });
+          return;
+        }
+
+        // 20. Cron Jobs API: Delete Job
+        const deleteMatch = url.pathname.match(/^\/api\/cron\/jobs\/([^/]+)$/);
+        if (req.method === 'DELETE' && deleteMatch) {
+          const jobId = decodeURIComponent(deleteMatch[1]);
+          try {
+            const deleted = await this.scheduler.deleteJob(jobId);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: deleted }));
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+          return;
+        }
+
+        // 21. Cron Jobs API: Execution Logs
+        if (req.method === 'GET' && url.pathname === '/api/cron/logs') {
+          try {
+            const jobId = url.searchParams.get('jobId') || undefined;
+            const limit = parseInt(url.searchParams.get('limit') || '50', 10);
+            const logs = await this.scheduler.getLogs(jobId, limit);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(logs));
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+          return;
+        }
+
+        // 22. Inbound Webhook Ingress
+        const webhookMatch = url.pathname.match(/^\/api\/webhooks\/([^/]+)$/);
+        if (req.method === 'POST' && webhookMatch) {
+          const webhookName = decodeURIComponent(webhookMatch[1]);
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              // HMAC SHA-256 signature verification if secret is configured
+              if (this.webhookSecret) {
+                const signatureHeader =
+                  req.headers['x-talon-signature'] || req.headers['x-hub-signature-256'];
+                if (!signatureHeader) {
+                  res.writeHead(401, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ error: 'Missing X-Talon-Signature header' }));
+                  return;
+                }
+                const hmac = crypto.createHmac('sha256', this.webhookSecret);
+                hmac.update(body);
+                const expectedSignature = hmac.digest('hex');
+                const cleanSignature = String(signatureHeader).replace(/^sha256=/, '');
+                if (cleanSignature !== expectedSignature) {
+                  res.writeHead(401, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ error: 'Invalid webhook signature' }));
+                  return;
+                }
+              }
+
+              let payload: Record<string, unknown> = {};
+              try {
+                payload = JSON.parse(body);
+              } catch {
+                payload = { raw: body };
+              }
+
+              // Check if a registered job matches webhook-${name} or ${name}
+              const matchingJob =
+                (await this.router.getMemory().getJob(`webhook-${webhookName}`)) ||
+                (await this.router.getMemory().getJob(webhookName));
+
+              if (matchingJob) {
+                const log = await this.scheduler.triggerJob(matchingJob.id);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, triggeredJob: matchingJob.name, log }));
+                return;
+              }
+
+              // Otherwise execute ad-hoc skill if specified in payload
+              const startTime = Date.now();
+              if (payload.actionType === 'skill' && typeof payload.skillName === 'string') {
+                const skill = await this.router.getMemory().getSkill(payload.skillName);
+                if (!skill) {
+                  res.writeHead(404, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ error: `Skill "${payload.skillName}" not found` }));
+                  return;
+                }
+                const sandboxed = await this.router.getSandbox().execute({
+                  code: skill.code,
+                  args: (payload.args as Record<string, unknown>) || payload,
+                  capabilities: skill.capabilities,
+                });
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(
+                  JSON.stringify({
+                    success: sandboxed.success,
+                    result: sandboxed.data ?? sandboxed.error,
+                  })
+                );
+                return;
+              }
+
+              // Default: Execute fast path prompt with webhook event context
+              const prompt =
+                typeof payload.prompt === 'string'
+                  ? payload.prompt
+                  : `Webhook event "${webhookName}" received with payload: ${JSON.stringify(
+                      payload
+                    )}. Process and summarize.`;
+
+              const result = await this.router.executeFastPath({
+                sessionId: `webhook_${webhookName}_${Date.now()}`,
+                input: prompt,
+              });
+
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(
+                JSON.stringify({
+                  success: true,
+                  event: webhookName,
+                  output: result.output,
+                  latencyMs: Date.now() - startTime,
+                  tokensUsed: result.tokensUsed,
+                })
+              );
+            } catch (err: unknown) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: String(err) }));
+            }
           });
           return;
         }
@@ -712,12 +947,14 @@ export class LocalDaemonAdapter {
         if (addr && typeof addr === 'object' && addr.port) {
           this.port = addr.port;
         }
+        this.scheduler.start();
         resolve(this.port);
       });
     });
   }
 
   public stop(): Promise<void> {
+    this.scheduler.stop();
     return new Promise((resolve) => {
       if (this.server) {
         if (typeof this.server.closeAllConnections === 'function') {

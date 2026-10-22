@@ -53,6 +53,9 @@ describe('Gateway - Embedded Web Dashboard & Cockpit APIs', () => {
     expect(html).toContain('brand-badge');
     expect(html).toContain('Swarm Topologies');
     expect(html).toContain('MCP Hub');
+    expect(html).toContain('Automations & Cron');
+    expect(html).toContain('cron-jobs-table-body');
+    expect(html).toContain('cron-alert-banner');
     expect(html).toContain('swarm-top-fanout');
     expect(html).toContain('mcp-tools-list');
   });

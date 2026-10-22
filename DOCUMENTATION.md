@@ -335,6 +335,56 @@ Restores memory state, skills, and facts from a JSON snapshot into the active da
 talon memory import backup-snapshot.json --overwrite
 ```
 
+#### 26. `talon cron list` (alias `talon schedule list`)
+Lists all registered background automations, cron expressions, next execution time, and last run status.
+
+```bash
+talon cron list
+```
+
+#### 27. `talon cron add`
+Registers a new autonomous background automation. Supports Fast Path prompt AI actions and Zero-Token direct skill actions.
+
+```bash
+# Register an hourly health check skill action (0 tokens)
+talon cron add --name hourly-health --cron "@hourly" --skill http_json_fetcher --args '{"url":"https://api.github.com/zen"}'
+
+# Register a daily operational digest prompt action
+talon cron add --name daily-digest --cron "@daily" --prompt "Analyze traces and summarize daily health"
+
+# Register an interval watcher every 30 minutes
+talon cron add --name cache-watcher --cron "every 30m" --skill math_stats_calculator --args '{"numbers":[1,2,3,4]}'
+```
+
+#### 28. `talon cron trigger <idOrName>`
+Triggers an automation immediately on-demand and prints real-time execution results, duration, and token telemetry.
+
+```bash
+talon cron trigger daily-digest
+```
+
+#### 29. `talon cron pause <idOrName>` & `talon cron resume <idOrName>`
+Toggles an automation between paused and active states without deleting its configuration.
+
+```bash
+talon cron pause daily-digest
+talon cron resume daily-digest
+```
+
+#### 30. `talon cron remove <idOrName>` (alias `delete`)
+Permanently deletes a scheduled automation from the database.
+
+```bash
+talon cron remove hourly-health
+```
+
+#### 31. `talon cron logs [idOrName]`
+Inspects historical execution logs, statuses, latency, token consumption, and outputs.
+
+```bash
+talon cron logs daily-digest --limit 20
+```
+
 ---
 
 ## Dual-Brain Protocol (Fast Path vs Slow Path)
@@ -510,6 +560,14 @@ When running `talon serve` or `LocalDaemonAdapter`, the following endpoints are 
 | `GET` | `/api/traces` | Retrieve recent episodic execution traces with latency and token telemetry |
 | `GET` | `/api/skills` | List all registered procedural skills with metadata and capabilities |
 | `POST` | `/api/skills/test` | Execute a skill directly in the Zero-Trust Sandbox (`{ name: string, args: Record<string, unknown> }`) |
+| `POST` | `/api/webhooks/:name` | Inbound Webhook Ingress with optional HMAC SHA-256 signature validation (`X-Talon-Signature`) |
+| `GET` | `/api/cron/jobs` | List all registered background automations, schedules, and statuses |
+| `POST` | `/api/cron/jobs` | Register a new autonomous automation (`{ name, cron, actionType, actionPayload }`) |
+| `POST` | `/api/cron/jobs/:id/trigger` | Manually fire an automation immediately |
+| `POST` | `/api/cron/jobs/:id/toggle` | Pause or resume an automation (`{ active: boolean }`) |
+| `DELETE` | `/api/cron/jobs/:id` | Permanently remove a background automation |
+| `GET` | `/api/cron/logs` | Fetch audit logs of scheduled job executions (`?jobId=...&limit=50`) |
+| `GET` | `/api/events` | Real-time SSE event bus streaming `trace`, `skill_registered`, `evolution_completed`, and `cron_notification` |
 
 ---
 

@@ -324,6 +324,7 @@ export function getDashboardHtml(): string {
       <button class="tab-btn" onclick="switchTab('mcp')">MCP Hub</button>
       <button class="tab-btn" onclick="switchTab('facts')">Semantic Memory</button>
       <button class="tab-btn" onclick="switchTab('chat')">Live Playground</button>
+      <button class="tab-btn" onclick="switchTab('automations')">Automations & Cron</button>
     </nav>
   </header>
 
@@ -692,6 +693,160 @@ export function getDashboardHtml(): string {
         </div>
       </div>
     </section>
+
+    <!-- TAB 8: AGENT CRON & AUTONOMOUS AUTOMATIONS -->
+    <section id="automations" class="tab-content">
+      <!-- Proactive Heartbeat Alert Banner -->
+      <div id="cron-alert-banner" style="display: none; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 1rem 1.5rem; margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <span style="font-size: 1.25rem;">⏰</span>
+          <div>
+            <div style="font-weight: 700; color: #34d399;" id="cron-alert-title">Proactive Watcher Event</div>
+            <div style="font-size: 0.85rem; color: var(--text-muted);" id="cron-alert-desc">OpenTalon executed a background job automatically.</div>
+          </div>
+        </div>
+        <button class="btn" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; background: #374151;" onclick="dismissCronAlert()">Dismiss</button>
+      </div>
+
+      <!-- Quick Preset Cards -->
+      <div class="card" style="margin-bottom: 1.5rem;">
+        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+          <span>⚡ Instant Automation Presets</span>
+          <span class="badge badge-success">Zero-Config Templates</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Click any preset to prefill and configure an autonomous background routine immediately:
+        </p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem;">
+          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; cursor: pointer; transition: all 0.2s ease;" onclick="applyAutomationPreset('hourly-health-check', '@hourly', 'skill', 'http_json_fetcher', { url: 'http://127.0.0.1:3100/health' })" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--card-border)'">
+            <div style="font-weight: 700; font-size: 0.9rem; color: #38bdf8; margin-bottom: 0.25rem;">🩺 Hourly Health Check</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem;">Direct Skill Action (0 tokens) — verifies endpoint availability every hour.</div>
+            <span class="badge badge-blue">@hourly • Skill</span>
+          </div>
+          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; cursor: pointer; transition: all 0.2s ease;" onclick="applyAutomationPreset('daily-system-digest', '@daily', 'prompt', '', { prompt: 'Analyze recent traces, memory facts, and generate a daily operational digest.' })" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--card-border)'">
+            <div style="font-weight: 700; font-size: 0.9rem; color: #a78bfa; margin-bottom: 0.25rem;">📊 Daily Operational Digest</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem;">Fast Path Prompt — synthesizes execution statistics and health report.</div>
+            <span class="badge badge-purple">@daily • Prompt</span>
+          </div>
+          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; cursor: pointer; transition: all 0.2s ease;" onclick="applyAutomationPreset('periodic-watcher-30s', 'every 30s', 'prompt', '', { prompt: 'Scan for system anomalies and report status.' })" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--card-border)'">
+            <div style="font-weight: 700; font-size: 0.9rem; color: #34d399; margin-bottom: 0.25rem;">⏱️ 30s Rapid Watcher</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem;">Short interval test — runs every 30 seconds for live monitoring.</div>
+            <span class="badge badge-success">every 30s • Prompt</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- New Automation Form Modal/Drawer -->
+      <div class="card" id="new-cron-card" style="display: none; margin-bottom: 1.5rem; border-color: var(--primary);">
+        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+          <span id="cron-form-title">Register Autonomous Background Job</span>
+          <button class="btn" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; background: #374151;" onclick="closeNewCronModal()">Cancel</button>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.35rem;">Job Name (Unique slug):</label>
+            <input type="text" id="cron-name-input" class="chat-input" placeholder="e.g. hourly-backup" style="width: 100%;" />
+          </div>
+          <div>
+            <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.35rem;">Schedule (Cron / Natural Interval):</label>
+            <input type="text" id="cron-expr-input" class="chat-input" placeholder="e.g. */15 * * * * or @hourly or every 30m" style="width: 100%;" />
+          </div>
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+          <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.35rem;">Action Routing Mode:</label>
+          <div style="display: flex; gap: 1.5rem; align-items: center;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer;">
+              <input type="radio" name="cronActionType" value="prompt" checked onchange="toggleCronActionTypeInputs()" />
+              <span>Prompt Action (Fast Path AI Reasoning, &lt;1,500 tokens)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer;">
+              <input type="radio" name="cronActionType" value="skill" onchange="toggleCronActionTypeInputs()" />
+              <span>Direct Skill Action (Zero-Trust Sandbox, 0 tokens)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Prompt Payload Field -->
+        <div id="cron-prompt-field" style="margin-bottom: 1rem;">
+          <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.35rem;">AI Prompt Instruction:</label>
+          <textarea id="cron-prompt-input" class="chat-input" rows="3" placeholder="Enter instructions for the agent to execute on schedule..." style="width: 100%; font-family: var(--font-sans);"></textarea>
+        </div>
+
+        <!-- Skill Payload Fields -->
+        <div id="cron-skill-field" style="display: none; margin-bottom: 1rem;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+              <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.35rem;">Skill Name:</label>
+              <input type="text" id="cron-skill-name-input" class="chat-input" placeholder="e.g. http_json_fetcher" style="width: 100%;" />
+            </div>
+            <div>
+              <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.35rem;">JSON Arguments (args):</label>
+              <input type="text" id="cron-skill-args-input" class="chat-input" placeholder='{"url": "https://..."}' style="width: 100%; font-family: var(--font-mono);" />
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+          <button class="btn" style="background: #374151; padding: 0.5rem 1rem;" onclick="closeNewCronModal()">Cancel</button>
+          <button class="btn" style="padding: 0.5rem 1.25rem;" onclick="submitNewCronJob()">Save & Activate Automation</button>
+        </div>
+      </div>
+
+      <!-- Active Automations Table -->
+      <div class="card">
+        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <span>Active Scheduled Automations</span>
+            <span id="cron-active-count-badge" class="badge badge-blue">0 Jobs</span>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;" onclick="openNewCronModal()">+ New Automation</button>
+            <button class="btn" style="background: #374151; padding: 0.35rem 0.75rem; font-size: 0.75rem;" onclick="loadAutomations()">Refresh</button>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Name</th>
+              <th>Schedule</th>
+              <th>Action Type</th>
+              <th>Next Run</th>
+              <th>Last Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="cron-jobs-table-body">
+            <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Loading background automations...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Recent Execution Logs Drawer -->
+      <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Execution History & Audit Logs</span>
+          <button class="btn" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; background: #374151;" onclick="loadCronLogs()">Refresh Logs</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Job ID</th>
+              <th>Time</th>
+              <th>Duration</th>
+              <th>Tokens</th>
+              <th>Status</th>
+              <th>Output / Error</th>
+            </tr>
+          </thead>
+          <tbody id="cron-logs-table-body">
+            <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No background execution logs yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </main>
 
   <script>
@@ -711,6 +866,7 @@ export function getDashboardHtml(): string {
       if (tabId === 'overview') loadStats();
       if (tabId === 'mcp') loadMcpTools();
       if (tabId === 'facts') loadFacts();
+      if (tabId === 'automations') loadAutomations();
     }
 
     async function loadStats() {
@@ -1649,6 +1805,243 @@ export function getDashboardHtml(): string {
       render();
     }
 
+    // Automations & Cron Controller
+    function openNewCronModal() {
+      const card = document.getElementById('new-cron-card');
+      if (card) card.style.display = 'block';
+    }
+
+    function closeNewCronModal() {
+      const card = document.getElementById('new-cron-card');
+      if (card) card.style.display = 'none';
+    }
+
+    function toggleCronActionTypeInputs() {
+      const checked = document.querySelector('input[name="cronActionType"]:checked');
+      const type = checked ? checked.value : 'prompt';
+      const promptField = document.getElementById('cron-prompt-field');
+      const skillField = document.getElementById('cron-skill-field');
+      if (promptField && skillField) {
+        if (type === 'prompt') {
+          promptField.style.display = 'block';
+          skillField.style.display = 'none';
+        } else {
+          promptField.style.display = 'none';
+          skillField.style.display = 'block';
+        }
+      }
+    }
+
+    function applyAutomationPreset(name, cron, actionType, skillName, payload) {
+      openNewCronModal();
+      const nameInput = document.getElementById('cron-name-input');
+      const exprInput = document.getElementById('cron-expr-input');
+      if (nameInput) nameInput.value = name;
+      if (exprInput) exprInput.value = cron;
+      const radios = document.querySelectorAll('input[name="cronActionType"]');
+      radios.forEach((r) => { (r as HTMLInputElement).checked = ((r as HTMLInputElement).value === actionType); });
+      toggleCronActionTypeInputs();
+
+      if (actionType === 'prompt') {
+        const pInput = document.getElementById('cron-prompt-input');
+        if (pInput) pInput.value = payload.prompt || '';
+      } else {
+        const sInput = document.getElementById('cron-skill-name-input');
+        const aInput = document.getElementById('cron-skill-args-input');
+        if (sInput) sInput.value = skillName || '';
+        if (aInput) aInput.value = payload ? JSON.stringify(payload) : '{}';
+      }
+    }
+
+    async function submitNewCronJob() {
+      const name = (document.getElementById('cron-name-input') as HTMLInputElement).value.trim();
+      const cron = (document.getElementById('cron-expr-input') as HTMLInputElement).value.trim();
+      const checked = document.querySelector('input[name="cronActionType"]:checked') as HTMLInputElement;
+      const actionType = checked ? checked.value : 'prompt';
+
+      if (!name || !cron) {
+        alert('Please fill in Job Name and Schedule Expression.');
+        return;
+      }
+
+      let actionPayload: any = {};
+      if (actionType === 'prompt') {
+        const prompt = (document.getElementById('cron-prompt-input') as HTMLTextAreaElement).value.trim();
+        if (!prompt) {
+          alert('Please enter a prompt instruction.');
+          return;
+        }
+        actionPayload = { prompt };
+      } else {
+        const skillName = (document.getElementById('cron-skill-name-input') as HTMLInputElement).value.trim();
+        const argsStr = (document.getElementById('cron-skill-args-input') as HTMLInputElement).value.trim() || '{}';
+        if (!skillName) {
+          alert('Please enter a skill name.');
+          return;
+        }
+        try {
+          actionPayload = { skillName, args: JSON.parse(argsStr) };
+        } catch (e: any) {
+          alert('Invalid JSON in skill arguments: ' + e.message);
+          return;
+        }
+      }
+
+      try {
+        const res = await fetch('/api/cron/jobs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            cron,
+            actionType,
+            actionPayload,
+            status: 'active',
+            notifyChannels: ['sse'],
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          alert('Failed to register job: ' + (err.error || res.statusText));
+          return;
+        }
+        closeNewCronModal();
+        loadAutomations();
+      } catch (e: any) {
+        alert('Error: ' + e.message);
+      }
+    }
+
+    async function loadAutomations() {
+      const tbody = document.getElementById('cron-jobs-table-body');
+      if (!tbody) return;
+      try {
+        const res = await fetch('/api/cron/jobs');
+        const jobs = await res.json();
+        const badge = document.getElementById('cron-active-count-badge');
+        if (badge) badge.innerText = jobs.length + ' Jobs';
+
+        if (!jobs || jobs.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No background automations registered yet. Use presets above or click "+ New Automation".</td></tr>';
+          loadCronLogs();
+          return;
+        }
+
+        tbody.innerHTML = jobs.map((j: any) => {
+          const isPaused = j.status === 'paused';
+          const statusBadge = isPaused 
+            ? '<span class="badge" style="background: rgba(107, 114, 128, 0.2); color: #9ca3af;">Paused</span>' 
+            : '<span class="badge badge-success">Active</span>';
+          const typeBadge = j.actionType === 'prompt' 
+            ? '<span class="badge badge-purple">Prompt</span>' 
+            : '<span class="badge badge-blue">Skill (0 tokens)</span>';
+          const nextRun = j.nextRunAt ? new Date(j.nextRunAt).toLocaleTimeString() : 'N/A';
+          const lastStatus = j.lastStatus ? '<span class="badge ' + (j.lastStatus === 'success' ? 'badge-success' : 'badge') + '" style="' + (j.lastStatus !== 'success' ? 'background:rgba(239, 68, 68, 0.2);color:#f87171;' : '') + '">' + j.lastStatus + '</span>' : '<span style="color:var(--text-muted)">Pending</span>';
+
+          return '<tr>' +
+            '<td>' + statusBadge + '</td>' +
+            '<td style="font-weight: 600; color: #fff;">' + escapeHtml(j.name) + '</td>' +
+            '<td><code>' + escapeHtml(j.cron) + '</code></td>' +
+            '<td>' + typeBadge + '</td>' +
+            '<td class="tabular-nums" style="font-size: 0.825rem;">' + nextRun + '</td>' +
+            '<td>' + lastStatus + '</td>' +
+            '<td style="white-space: nowrap;">' +
+              '<button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.35rem;" onclick="triggerCronJob(\\'' + escapeHtml(j.id) + '\\')">Run Now</button>' +
+              '<button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: #374151; margin-right: 0.35rem;" onclick="toggleCronJob(\\'' + escapeHtml(j.id) + '\\', ' + (!isPaused) + ')">' + (isPaused ? 'Resume' : 'Pause') + '</button>' +
+              '<button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: #991b1b;" onclick="deleteCronJob(\\'' + escapeHtml(j.id) + '\\')">Del</button>' +
+            '</td>' +
+          '</tr>';
+        }).join('');
+
+        loadCronLogs();
+      } catch (e: any) {
+        tbody.innerHTML = '<tr><td colspan="7" style="color: #ef4444; text-align: center;">Error loading automations: ' + e.message + '</td></tr>';
+      }
+    }
+
+    async function triggerCronJob(id: string) {
+      try {
+        const res = await fetch('/api/cron/jobs/' + encodeURIComponent(id) + '/trigger', { method: 'POST' });
+        const log = await res.json();
+        loadAutomations();
+        showCronAlert('Triggered job manually', 'Result: ' + log.status + ' (Duration: ' + log.durationMs + 'ms)');
+      } catch (e: any) {
+        alert('Trigger failed: ' + e.message);
+      }
+    }
+
+    async function toggleCronJob(id: string, active: boolean) {
+      try {
+        await fetch('/api/cron/jobs/' + encodeURIComponent(id) + '/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ active }),
+        });
+        loadAutomations();
+      } catch (e: any) {
+        alert('Toggle failed: ' + e.message);
+      }
+    }
+
+    async function deleteCronJob(id: string) {
+      if (!confirm('Are you sure you want to delete this scheduled automation?')) return;
+      try {
+        await fetch('/api/cron/jobs/' + encodeURIComponent(id), { method: 'DELETE' });
+        loadAutomations();
+      } catch (e: any) {
+        alert('Delete failed: ' + e.message);
+      }
+    }
+
+    async function loadCronLogs() {
+      const tbody = document.getElementById('cron-logs-table-body');
+      if (!tbody) return;
+      try {
+        const res = await fetch('/api/cron/logs?limit=25');
+        const logs = await res.json();
+        if (!logs || logs.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1rem;">No execution logs recorded yet.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = logs.map((l: any) => {
+          const time = new Date(l.startedAt).toLocaleTimeString();
+          const statusBadge = l.status === 'success' 
+            ? '<span class="badge badge-success">success</span>' 
+            : '<span class="badge" style="background:rgba(239, 68, 68, 0.2);color:#f87171;">' + l.status + '</span>';
+          const detail = l.errorMessage || l.output || 'No output';
+          const preview = detail.length > 70 ? detail.slice(0, 70) + '...' : detail;
+
+          return '<tr>' +
+            '<td style="font-family: var(--font-mono); font-size: 0.75rem;">' + escapeHtml(l.jobId) + '</td>' +
+            '<td class="tabular-nums" style="font-size: 0.8rem;">' + time + '</td>' +
+            '<td class="tabular-nums" style="font-size: 0.8rem;">' + (l.durationMs != null ? l.durationMs + 'ms' : '--') + '</td>' +
+            '<td class="tabular-nums" style="font-size: 0.8rem;">' + (l.tokensUsed || 0) + '</td>' +
+            '<td>' + statusBadge + '</td>' +
+            '<td style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="' + escapeHtml(detail) + '">' + escapeHtml(preview) + '</td>' +
+          '</tr>';
+        }).join('');
+      } catch (e: any) {
+        tbody.innerHTML = '<tr><td colspan="6" style="color: #ef4444; text-align: center;">Error loading logs: ' + e.message + '</td></tr>';
+      }
+    }
+
+    function showCronAlert(title: string, desc: string) {
+      const banner = document.getElementById('cron-alert-banner');
+      const titleEl = document.getElementById('cron-alert-title');
+      const descEl = document.getElementById('cron-alert-desc');
+      if (banner && titleEl && descEl) {
+        titleEl.innerText = title;
+        descEl.innerText = desc;
+        banner.style.display = 'flex';
+      }
+    }
+
+    function dismissCronAlert() {
+      const banner = document.getElementById('cron-alert-banner');
+      if (banner) banner.style.display = 'none';
+    }
+
     // Live Server-Sent Events (SSE) Bus
     function initLiveEvents() {
       if (!window.EventSource) return;
@@ -1674,6 +2067,15 @@ export function getDashboardHtml(): string {
             badge.className = 'badge badge-success';
             badge.innerText = 'Evolution Synced';
           }
+        });
+        es.addEventListener('cron_notification', (e) => {
+          window.pulse3DHero?.('fast');
+          try {
+            const data = JSON.parse(e.data);
+            showCronAlert('Automated Execution: ' + data.jobName, 'Status: ' + data.status + ' (Tokens: ' + (data.tokensUsed || 0) + ')');
+          } catch (_) {}
+          const activeTab = document.querySelector('.tab-content.active')?.id;
+          if (activeTab === 'automations') loadAutomations();
         });
       } catch (e) {}
     }

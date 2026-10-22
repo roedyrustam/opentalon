@@ -24,10 +24,15 @@
 
 ### `@opentalon/core` (Control Plane)
 - **`DualBrainRouter`**: Coordinates Fast Path (<1,500 token budget) and Slow Path (async event-driven evolution).
+- **`CronScheduler` & `CronParser`**: Autonomous in-process heartbeat scheduler evaluating 5-part UNIX cron expressions and natural intervals (`@hourly`, `every 30m`), single-flight execution mutex, timeout guards, and dual routing (Fast Path prompt vs. Zero-Token direct skill).
 - **`TokenBudgeter`**: Context pruner maintaining strict per-turn token ceilings (~3.8 chars/token).
 - **Hexagonal `LLMPort`**: Pluggable drivers including:
   - `GeminiDriver` (native `thinkingConfig.thinkingBudget`, prompt caching, and automatic fallback)
+  - `AnthropicDriver` (Claude 3.7 hybrid thinking tokens & tool calling)
+  - `DeepSeekDriver` (ultra-frugal reasoning content extraction)
+  - `OllamaDriver` (100% offline local inference & embeddings)
   - `OpenAIDriver` (standard chat completions & embeddings)
+  - `CascadingLLMDriver` (dynamic priority failover & circuit breakers)
   - `MockLLMDriver` (deterministic offline testing double)
 - **`EvolutionEngine` & `HeuristicsExtractor`**: Autonomous reflection on failed/missing-skill traces with dry-run sandbox verification.
 - **`McpServer` & `McpClientAdapter`**: Full MCP v1.x JSON-RPC 2.0 protocol implementation over Stdio.
@@ -35,6 +40,8 @@
 
 ### `@opentalon/memory` (Storage & Hybrid Search)
 - **`LibSqlMemoryAdapter`**: Local `.db` and remote Turso `libsql://` unified client.
+- **`scheduled_jobs` & `job_execution_logs`**: Persistent job schedule registry and audit trail with next-run indexes and automatic retry counts.
+- **`semantic_facts` & FTS5**: Long-term declarative knowledge and developer preferences.
 - **FTS5 BM25 Engine**: Sub-millisecond keyword retrieval with fallback LIKE query support.
 - **Vector Cosine Similarity**: Float32Array embedding storage and cosine distance computation.
 - **Reciprocal Rank Fusion (RRF)**: $RRF(d) = \sum \frac{1}{k + r(d)}$ for balancing semantic and lexical ranks.
@@ -49,13 +56,14 @@
 - **`SkillSynthesizer`**: Autonomous generator validating test fixtures inside the sandbox before persisting.
 
 ### `@opentalon/gateway` (Hexagonal Ingress)
-- **`LocalDaemonAdapter`**: Local HTTP server with REST endpoints, healthchecks, and embedded Web Dashboard.
+- **`LocalDaemonAdapter`**: Local HTTP server with REST endpoints, healthchecks, proactive heartbeat scheduler, and embedded Web Dashboard.
+- **Inbound Webhook Ingress**: `POST /api/webhooks/:name` with optional HMAC SHA-256 signature verification (`X-Talon-Signature`).
 - **`ServerlessEdgeAdapter`**: Web Standards Fetch API handler for Cloudflare Workers and Edge runtimes.
-- **`SseStreamAdapter`**: Server-Sent Events (SSE) token-by-token streaming response generator.
-- **Embedded Web Dashboard**: Zero-dependency dark-mode Cockpit with Overview Telemetry, Traces Inspector, Skills Explorer with Sandbox Runner, and Live Streaming Chat Playground.
+- **`SseStreamAdapter`**: Server-Sent Events (SSE) token-by-token streaming response generator & real-time event router bus.
+- **Embedded Web Dashboard (8 Tabs)**: Zero-dependency dark-mode Cockpit with Overview Telemetry, 3D Holographic Core, Traces Inspector, Skills Explorer with Sandbox Runner, Swarm Topologies, MCP Hub, Semantic Memory, Live Streaming Chat Playground, and Automations & Cron Manager.
 
 ### `talon` CLI
-- Binary commands: `init`, `run`, `chat`, `serve`, `dashboard`, `mcp`, `swarm`, `evolve`, `skills list`, `skills add`.
+- Binary commands: `init`, `run`, `chat`, `serve`, `dashboard`, `cron` (or `schedule`), `mcp`, `swarm`, `evolve`, `skills list`, `skills add`, `providers`, `memory`.
 
 ---
 

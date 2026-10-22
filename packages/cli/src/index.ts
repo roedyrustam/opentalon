@@ -16,6 +16,7 @@ import {
   McpClientAdapter,
   McpToolBridge,
   SwarmDirector,
+  CronScheduler,
   type ChatMessage,
   type ILLMPort,
   type CascadeProvider,
@@ -157,8 +158,9 @@ function getComponents(dbPath = 'opentalon.db') {
   const evolutionEngine = new EvolutionEngine(memory, sandbox, llm);
   const mcpServer = new McpServer(memory, sandbox);
   const swarmDirector = new SwarmDirector(llm);
+  const scheduler = new CronScheduler({ memory, router, sandbox });
 
-  return { memory, sandbox, llm, router, evolutionEngine, mcpServer, swarmDirector };
+  return { memory, sandbox, llm, router, evolutionEngine, mcpServer, swarmDirector, scheduler };
 }
 
 // 1. `talon init`
@@ -182,6 +184,30 @@ program
 
     const memory = new LibSqlMemoryAdapter({ url: 'file:opentalon.db' });
     await memory.initialize();
+
+    const existingJobs = await memory.listJobs();
+    if (existingJobs.length === 0) {
+      await memory.saveJob({
+        id: 'job-health-check',
+        name: 'hourly-health-check',
+        cron: '@hourly',
+        actionType: 'skill',
+        actionPayload: {
+          skillName: 'http_json_fetcher',
+          args: { url: 'http://127.0.0.1:3100/health' },
+        },
+        status: 'active',
+        nextRunAt: Date.now() + 3600000,
+        failureCount: 0,
+        maxRetries: 3,
+        timeoutMs: 15000,
+        notifyChannels: ['sse'],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      console.log('  Seeded preset automation: hourly-health-check (@hourly)');
+    }
+
     await memory.close();
     console.log('  Initialized local SQLite database: opentalon.db');
     console.log('✅ OpenTalon workspace is ready.');
@@ -618,6 +644,8 @@ program
     console.log(`   Healthcheck: http://${options.host}:${port}/health`);
     console.log(`   Chat Endpoint: POST http://${options.host}:${port}/v1/chat`);
     console.log(`   Stream Endpoint: POST http://${options.host}:${port}/v1/stream`);
+    console.log(`   Cron & Automations: Heartbeat Scheduler Active (1s ticks)`);
+    console.log(`   Webhook Ingress: POST http://${options.host}:${port}/api/webhooks/:name`);
   });
 
 // 5. `talon dashboard`
@@ -1372,6 +1400,294 @@ program
       console.log('  Running in single provider mode: ' + (llm.constructor ? llm.constructor.name : 'Unknown'));
       console.log('  Configure GEMINI_API_KEY, ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY, or OLLAMA_MODEL in .env to activate the full multi-model cascade.\n');
     }
+  });
+
+// 13. `talon cron` / `talon schedule`
+const cronCommand = program
+  .command('cron')
+  .alias('schedule')
+  .description('Manage autonomous background scheduled jobs, cron triggers, and proactive watcher automations');
+
+// talon cron list
+cronCommand
+  .command('list')
+  .description('List all registered scheduled automations and their next execution time')
+  .action(async () => {
+    const { memory } = getComponents();
+    await memory.initialize();
+    const jobs = await memory.listJobs();
+    await memory.close();
+
+    console.log(`\n⏰ OpenTalon Scheduled Automations (${jobs.length} registered):\n`);
+    if (jobs.length === 0) {
+      console.log('   No scheduled automations registered.');
+      console.log('   Create one with: talon cron add --name <name> --cron "<expr>" --prompt "<prompt>"');
+      console.log('   Or add a 0-token skill: talon cron add --name <name> --cron "<expr>" --skill <skillName>\n');
+      return;
+    }
+
+    console.log(
+      '  ' +
+        'Status'.padEnd(10) +
+        'Name'.padEnd(26) +
+        'Schedule'.padEnd(16) +
+        'Action'.padEnd(18) +
+        'Next Run'.padEnd(22) +
+        'Last Status'
+    );
+    console.log('  ' + '─'.repeat(95));
+
+    for (const j of jobs) {
+      const isPaused = j.status === 'paused';
+      const statusBadge = isPaused ? '\x1b[33mPAUSED\x1b[0m' : '\x1b[32mACTIVE\x1b[0m';
+      const typeStr = j.actionType === 'prompt' ? '\x1b[35mPrompt\x1b[0m' : '\x1b[36mSkill (0 tok)\x1b[0m';
+      const nextRunStr = j.nextRunAt ? new Date(j.nextRunAt).toLocaleString() : 'N/A';
+      const lastStatus = j.lastStatus ? j.lastStatus.toUpperCase() : 'PENDING';
+
+      console.log(
+        '  ' +
+          statusBadge.padEnd(19) +
+          j.name.padEnd(26) +
+          j.cron.padEnd(16) +
+          typeStr.padEnd(27) +
+          nextRunStr.padEnd(22) +
+          lastStatus
+      );
+    }
+    console.log('\n💡 Background jobs execute autonomously inside "talon serve" daemon.\n');
+  });
+
+// talon cron add
+cronCommand
+  .command('add')
+  .description('Register a new background automation (Prompt AI action or direct 0-token Skill action)')
+  .requiredOption('-n, --name <name>', 'Unique automation name slug (e.g. hourly-health)')
+  .requiredOption('-c, --cron <expression>', 'Cron expression (e.g. "*/15 * * * *", "@hourly", "every 30m")')
+  .option('-p, --prompt <prompt>', 'AI instruction for Prompt Action')
+  .option('-s, --skill <skillName>', 'Registered skill name for Direct Skill Action (0 tokens)')
+  .option('-a, --args <json>', 'JSON arguments for skill action', '{}')
+  .option('--timeout <ms>', 'Execution timeout in ms', '30000')
+  .option('--retries <count>', 'Max consecutive retries before auto-pause', '3')
+  .action(
+    async (options: {
+      name: string;
+      cron: string;
+      prompt?: string;
+      skill?: string;
+      args: string;
+      timeout: string;
+      retries: string;
+    }) => {
+      const { scheduler, memory } = getComponents();
+      await memory.initialize();
+
+      if (!options.prompt && !options.skill) {
+        console.error('❌ You must provide either --prompt "<instruction>" or --skill <skillName>.');
+        await memory.close();
+        process.exit(1);
+      }
+
+      const actionType: 'prompt' | 'skill' = options.skill ? 'skill' : 'prompt';
+      let actionPayload: Record<string, unknown> = {};
+
+      if (actionType === 'skill') {
+        let parsedArgs = {};
+        try {
+          parsedArgs = JSON.parse(options.args);
+        } catch {
+          try {
+            parsedArgs = JSON.parse(options.args.replace(/'/g, '"'));
+          } catch {
+            try {
+              const fixed = options.args.replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":');
+              parsedArgs = JSON.parse(fixed);
+            } catch {
+              console.error('❌ Invalid JSON in --args:', options.args);
+              await memory.close();
+              process.exit(1);
+            }
+          }
+        }
+        actionPayload = { skillName: options.skill, args: parsedArgs };
+      } else {
+        actionPayload = { prompt: options.prompt };
+      }
+
+      try {
+        const job = await scheduler.registerJob({
+          name: options.name,
+          cron: options.cron,
+          actionType,
+          actionPayload,
+          status: 'active',
+          timeoutMs: parseInt(options.timeout, 10),
+          maxRetries: parseInt(options.retries, 10),
+          notifyChannels: ['sse'],
+        });
+        await memory.close();
+
+        console.log(`\n✅ Registered new scheduled automation:`);
+        console.log(`   ID:        ${job.id}`);
+        console.log(`   Name:      ${job.name}`);
+        console.log(`   Schedule:  ${job.cron}`);
+        console.log(`   Action:    ${job.actionType.toUpperCase()}`);
+        console.log(`   Next Run:  ${job.nextRunAt ? new Date(job.nextRunAt).toLocaleString() : 'N/A'}`);
+        console.log(`\n💡 To trigger immediately: talon cron trigger ${job.name}\n`);
+      } catch (err: unknown) {
+        console.error('❌ Failed to register job:', err instanceof Error ? err.message : String(err));
+        await memory.close();
+        process.exit(1);
+      }
+    }
+  );
+
+// talon cron trigger <idOrName>
+cronCommand
+  .command('trigger <idOrName>')
+  .description('Trigger a scheduled automation immediately on demand')
+  .action(async (idOrName: string) => {
+    const { scheduler, memory } = getComponents();
+    await memory.initialize();
+
+    console.log(`\n⚡ Triggering scheduled automation "${idOrName}"...`);
+    try {
+      const log = await scheduler.triggerJob(idOrName);
+      await memory.close();
+
+      console.log(`\n--- Execution Result (${log.durationMs}ms) ---`);
+      console.log(`Status:      ${log.status === 'success' ? '✅ SUCCESS' : '❌ ' + log.status.toUpperCase()}`);
+      console.log(`Tokens Used: ${log.tokensUsed}`);
+      if (log.output) {
+        console.log(`Output:`);
+        console.log(log.output);
+      }
+      if (log.errorMessage) {
+        console.log(`Error: ${log.errorMessage}`);
+      }
+      console.log('-------------------------------------\n');
+    } catch (err: unknown) {
+      console.error('❌ Trigger failed:', err instanceof Error ? err.message : String(err));
+      await memory.close();
+      process.exit(1);
+    }
+  });
+
+// talon cron pause <idOrName>
+cronCommand
+  .command('pause <idOrName>')
+  .description('Pause a scheduled automation')
+  .action(async (idOrName: string) => {
+    const { scheduler, memory } = getComponents();
+    await memory.initialize();
+    try {
+      const job = await scheduler.toggleJob(idOrName, false);
+      await memory.close();
+      console.log(`\n⏸️  Paused automation "${job.name}".\n`);
+    } catch (err: unknown) {
+      console.error('❌ Pause failed:', err instanceof Error ? err.message : String(err));
+      await memory.close();
+      process.exit(1);
+    }
+  });
+
+// talon cron resume <idOrName>
+cronCommand
+  .command('resume <idOrName>')
+  .description('Resume a paused scheduled automation')
+  .action(async (idOrName: string) => {
+    const { scheduler, memory } = getComponents();
+    await memory.initialize();
+    try {
+      const job = await scheduler.toggleJob(idOrName, true);
+      await memory.close();
+      console.log(
+        `\n▶️  Resumed automation "${job.name}". Next run: ${
+          job.nextRunAt ? new Date(job.nextRunAt).toLocaleString() : 'N/A'
+        }\n`
+      );
+    } catch (err: unknown) {
+      console.error('❌ Resume failed:', err instanceof Error ? err.message : String(err));
+      await memory.close();
+      process.exit(1);
+    }
+  });
+
+// talon cron remove <idOrName> / delete
+cronCommand
+  .command('remove <idOrName>')
+  .alias('delete')
+  .description('Delete a scheduled automation')
+  .action(async (idOrName: string) => {
+    const { scheduler, memory } = getComponents();
+    await memory.initialize();
+    try {
+      const deleted = await scheduler.deleteJob(idOrName);
+      await memory.close();
+      if (deleted) {
+        console.log(`\n🗑️  Successfully removed automation "${idOrName}".\n`);
+      } else {
+        console.log(`\n❌ Automation "${idOrName}" not found.\n`);
+      }
+    } catch (err: unknown) {
+      console.error('❌ Delete failed:', err instanceof Error ? err.message : String(err));
+      await memory.close();
+      process.exit(1);
+    }
+  });
+
+// talon cron logs [idOrName]
+cronCommand
+  .command('logs [idOrName]')
+  .description('View execution audit logs of scheduled automations')
+  .option('-l, --limit <count>', 'Maximum logs to display', '25')
+  .action(async (idOrName?: string, options?: { limit: string }) => {
+    const { memory } = getComponents();
+    await memory.initialize();
+    const limit = parseInt(options?.limit || '25', 10);
+    let targetJobId: string | undefined = undefined;
+    if (idOrName) {
+      const job = await memory.getJob(idOrName);
+      targetJobId = job ? job.id : idOrName;
+    }
+    const logs = await memory.getJobLogs(targetJobId, limit);
+    await memory.close();
+
+    console.log(`\n📜 OpenTalon Background Execution Logs (${logs.length} entries):\n`);
+    if (logs.length === 0) {
+      console.log('   No background execution logs recorded yet.\n');
+      return;
+    }
+
+    console.log(
+      '  ' +
+        'Time'.padEnd(20) +
+        'Job ID'.padEnd(16) +
+        'Status'.padEnd(12) +
+        'Duration'.padEnd(12) +
+        'Tokens'.padEnd(10) +
+        'Detail'
+    );
+    console.log('  ' + '─'.repeat(85));
+
+    for (const l of logs) {
+      const timeStr = new Date(l.startedAt).toLocaleTimeString();
+      const statusBadge =
+        l.status === 'success' ? '\x1b[32mSUCCESS\x1b[0m' : '\x1b[31m' + l.status.toUpperCase() + '\x1b[0m';
+      const durStr = l.durationMs != null ? `${l.durationMs}ms` : '--';
+      const detail = l.errorMessage || l.output || '';
+      const preview = detail.length > 30 ? detail.slice(0, 30) + '...' : detail;
+
+      console.log(
+        '  ' +
+          timeStr.padEnd(20) +
+          l.jobId.slice(0, 14).padEnd(16) +
+          statusBadge.padEnd(21) +
+          durStr.padEnd(12) +
+          String(l.tokensUsed).padEnd(10) +
+          preview
+      );
+    }
+    console.log('');
   });
 
 program.parse(process.argv);
