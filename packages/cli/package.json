@@ -1,12 +1,41 @@
 {
   "name": "talon",
   "version": "0.1.0",
+  "description": "Unified CLI binary for OpenTalon: developer tooling, interactive REPL chat, local HTTP daemon, visual dashboard cockpit, MCP server, and multi-agent swarm orchestrator",
+  "author": "Roedy Rustam <roedyrustam.id@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/roedyrustam/opentalon.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/roedyrustam/opentalon#readme",
+  "bugs": {
+    "url": "https://github.com/roedyrustam/opentalon/issues"
+  },
+  "keywords": [
+    "opentalon",
+    "talon",
+    "ai-agent",
+    "cli",
+    "repl",
+    "hermes-agent",
+    "openclaw",
+    "mcp",
+    "swarm"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "bin": {
     "talon": "./dist/index.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",

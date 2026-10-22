@@ -452,36 +452,20 @@ export default {
 };
 ```
 
-### 3. Gateway REST & JSON-RPC Endpoints
+### 3. Gateway REST & Streaming Endpoints
 
 When running `talon serve` or `LocalDaemonAdapter`, the following endpoints are available:
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `GET` | `/health` | Healthcheck and active daemon mode (`{"status":"ok","daemon":"local"}`) |
-| `GET` | `/dashboard` | Interactive Dual-Brain Web Cockpit UI with live 3D telemetry core |
+| `GET` | `/` or `/dashboard` | Interactive Dual-Brain Web Cockpit UI with live telemetry, traces, and sandbox tester |
 | `POST` | `/v1/chat` | Standard single-turn agent execution endpoint |
 | `POST` | `/v1/stream` | Server-Sent Events (SSE) streaming chat endpoint |
-| `GET` | `/api/stats` | Telemetry counters: skillsCount, tracesCount, factsCount, avgLatencyMs |
-| `GET` | `/api/skills` | List all registered procedural skills |
-| `POST` | `/api/skills` | Compile and commit a new procedural skill from markdown or JSON |
-| `DELETE` | `/api/skills?name=<name>` | Delete a skill from procedural memory and FTS5 index |
-| `POST` | `/api/skills/test` | Execute a skill directly in the Zero-Trust Sandbox (`{ name, args }`) |
-| `GET` | `/showcase` / `/3d` | Standalone 60FPS 3D Dynamic Holographic Core showcase |
-| `GET` | `/api/traces` | Retrieve the last 50 episodic execution traces |
-| `GET` | `/api/facts` | List semantic facts, optional filter `?category=<cat>` |
-| `POST` | `/api/facts` | Store a new semantic fact (`{ category, key, value, confidence }`) |
-| `DELETE` | `/api/facts?id=<id>` | Delete a semantic fact from memory |
-| `GET` | `/api/facts/search?q=<query>` | Full-text FTS5 keyword search across semantic memory |
-| `GET` | `/api/memory/export` | Download full memory snapshot as JSON (`?includeTraces=true`) |
-| `POST` | `/api/memory/import` | Import memory snapshot JSON into database (`{ overwrite: true }`) |
-| `POST` | `/api/evolution/run` | Trigger manual Hermes Slow Path cognitive evolution cycle |
-| `GET` | `/api/evolution/status` | Real-time cognitive evolution telemetry (status, queue, hourly syntheses) |
-| `GET` | `/api/events` | Real-time Server-Sent Events (SSE) router bus (`trace`, `skill`, `evolution`) |
-| `GET` | `/api/mcp/tools` | List MCP tools exposed by the gateway |
-| `POST` | `/api/mcp/rpc` | Model Context Protocol JSON-RPC 2.0 dispatch endpoint |
-| `POST` | `/api/mcp/import` | Auto-discover & synthesize skills from external HTTP MCP server |
-| `POST` | `/api/swarm/execute` | Dispatch Swarm topologies (`fan_out_fan_in`, `pipeline_saga`, `critic_validator_loop`) |
+| `GET` | `/api/stats` | Telemetry counters: `skillsCount`, `tracesCount`, `avgLatencyMs` |
+| `GET` | `/api/traces` | Retrieve recent episodic execution traces with latency and token telemetry |
+| `GET` | `/api/skills` | List all registered procedural skills with metadata and capabilities |
+| `POST` | `/api/skills/test` | Execute a skill directly in the Zero-Trust Sandbox (`{ name: string, args: Record<string, unknown> }`) |
 
 ---
 
@@ -522,6 +506,62 @@ export default async function run(args) {
 ```
 ```
 
+### Production Skill Gallery (`examples/skills/`)
+
+OpenTalon includes 6 verified production skills demonstrating different capability boundaries:
+
+| Skill | Capabilities | Purpose |
+| :--- | :--- | :--- |
+| [`currency-converter.md`](file:///c:/talon/examples/skills/currency-converter.md) | None (Pure math) | Fixed peg currency conversion between USD, EUR, and IDR |
+| [`http-json-fetcher.md`](file:///c:/talon/examples/skills/http-json-fetcher.md) | `net.allowedHosts`: allowlisted APIs | Safe external REST API querying with strict domain isolation |
+| [`security-sanitizer.md`](file:///c:/talon/examples/skills/security-sanitizer.md) | None (String processing) | Real-time defense against XSS, SQLi, and path traversal |
+| [`csv-data-pipeline.md`](file:///c:/talon/examples/skills/csv-data-pipeline.md) | `fs.readPaths`: `/data/cache` | VirtualFs-isolated CSV parsing and statistical column aggregation |
+| [`crypto-signer.md`](file:///c:/talon/examples/skills/crypto-signer.md) | None (Crypto algorithm) | Deterministic FNV-1a and DJB2 hash checksums for webhook integrity |
+| [`math-stats-calculator.md`](file:///c:/talon/examples/skills/math-stats-calculator.md) | None (Statistics) | Distribution analysis: mean, median, standard deviation, and p95 |
+
+---
+
+## Multi-Agent Swarm Topologies (`SwarmDirector`)
+
+OpenTalon includes native support for 3 coordinated multi-agent execution topologies:
+
+```
+1. FAN-OUT / FAN-IN (Parallel Research & Assembly)
+   Director ──┬──► Subagent A (Domain 1)   ──┐
+              ├──► Subagent B (Domain 2)   ──┼──► Master Synthesis Turn
+              └──► Subagent C (Domain 3)   ──┘
+
+2. PIPELINE SAGA (Sequential Dependent Execution)
+   Discovery (S1) ──► Architecture (S2) ──► Implementation (S3) ──► QA Validation (S4)
+
+3. CRITIC-VALIDATOR LOOP (Zero-Tolerance Self-Healing)
+   Implementer Agent ──► Artifact / Code ──► Auditor Critic ──► [Self-Heal / Approve]
+```
+
+Run swarms via CLI:
+```bash
+# Fan-Out / Fan-In
+pnpm talon swarm fanout "Audit security, benchmark performance, and synthesize migration plan"
+
+# Pipeline Saga
+pnpm talon swarm saga "Fetch market data -> Compute risk metrics -> Sign cryptographic payload"
+
+# Critic-Validator Loop
+pnpm talon swarm critic "Generate an ultra-fast in-memory cache algorithm with zero memory leaks"
+```
+
+---
+
+## Model Context Protocol (MCP v1.x)
+
+OpenTalon natively implements both sides of the Model Context Protocol:
+- **MCP Server**: Exposes all registered procedural skills as standard MCP tools over `stdio` using JSON-RPC 2.0.
+  ```bash
+  pnpm talon mcp
+  ```
+  Compatible out-of-the-box with **Claude Desktop**, **Cursor IDE**, and any MCP v1.x client.
+- **MCP Client Adapter**: In-process or HTTP adapter allowing OpenTalon to consume external MCP servers as capability-bounded tools.
+
 ---
 
 ## Verification & Testing
@@ -532,9 +572,8 @@ OpenTalon includes a comprehensive test suite across all monorepo modules using 
 pnpm test
 ```
 
-### Test Coverage Highlights (68 Tests Across 11 Suites)
-- **`@opentalon/memory`**: Verified FTS5 full-text indexing, vector cosine distance, RRF score ordering, trace persistence, semantic facts knowledge store, and portable memory snapshot export & import.
-- **`@opentalon/core`**: Verified Fast Path token budget truncation (<1,500 tokens), semantic facts auto-retrieval and system prefix injection, adaptive tool error self-correction, LLM tool-calling loops, mock driver fallback, Circuit Breaker self-healing, FinOps hourly throttle, and Swarm multi-agent orchestration (Fan-Out/Fan-In, Pipeline Saga, Critic-Validator Loop).
-- **`@opentalon/skill-engine`**: Verified `SKILL.md` parsing, zero-trust sandbox execution, capability violation rejection, timeout interception, semantic versioning, and full verification across **10 production skills** in the gallery.
-- **`@opentalon/gateway`**: Verified local daemon HTTP routing (`/health`, `/v1/chat`, `/v1/stream`), error handling, serverless edge payloads, Web Cockpit Dashboard, Swarm dispatcher, facts API, skills registration and deletion, slow path evolution triggers and telemetry status, SSE event stream, and MCP JSON-RPC 2.0 endpoints.
-- **MCP Protocol & Bridge**: Verified Model Context Protocol handshake, tools/list, tools/call sandboxing, resources/list traces, and `McpToolBridge` automatic remote tool import.
+### Test Coverage Highlights (69 Tests Across 11 Suites)
+- **`@opentalon/memory`**: Verified FTS5 full-text indexing, vector cosine distance, RRF score ordering, and trace persistence (`memory.test.ts` - 7 tests).
+- **`@opentalon/core`**: Verified Fast Path token budget truncation (<1,500 tokens), hybrid retrieval, LLM tool-calling loops, mock driver fallback, Hermes Evolution reflection, MCP JSON-RPC 2.0 protocols, and Swarm multi-agent orchestration (Fan-Out/Fan-In, Pipeline Saga, Critic-Validator Loop) (`core.test.ts`, `evolution.test.ts`, `mcp.test.ts`, `swarm.test.ts` - 22 tests).
+- **`@opentalon/skill-engine`**: Verified `SKILL.md` parsing, zero-trust sandbox execution, capability violation rejection, VirtualFs directory traversal protection, SHA-256 versioning and rollback, and full verification across **6 production skills** in the gallery (`skill-engine.test.ts`, `virtual-fs.test.ts`, `production-skills.test.ts` - 23 tests).
+- **`@opentalon/gateway`**: Verified local daemon HTTP routing (`/health`, `/v1/chat`, `/v1/stream`, `/api/stats`, `/api/traces`, `/api/skills`, `/api/skills/test`), serverless edge adapter, SSE token streaming, and zero-dependency Web Cockpit Dashboard (`gateway.test.ts`, `streaming.test.ts`, `dashboard.test.ts` - 17 tests).

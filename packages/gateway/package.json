@@ -1,6 +1,32 @@
 {
   "name": "@opentalon/gateway",
   "version": "0.1.0",
+  "description": "Hexagonal Ingress Gateways for OpenTalon: Local Daemon with embedded Visual Cockpit Dashboard, Serverless Edge Adapter (Cloudflare Workers/Lambda), and SSE Streaming Adapter",
+  "author": "Roedy Rustam <roedyrustam.id@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/roedyrustam/opentalon.git",
+    "directory": "packages/gateway"
+  },
+  "homepage": "https://github.com/roedyrustam/opentalon#readme",
+  "bugs": {
+    "url": "https://github.com/roedyrustam/opentalon/issues"
+  },
+  "keywords": [
+    "opentalon",
+    "ai-agent",
+    "gateway",
+    "sse",
+    "streaming",
+    "serverless-edge",
+    "cloudflare-workers",
+    "dashboard",
+    "visual-cockpit"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -10,6 +36,9 @@
       "types": "./dist/index.d.ts"
     }
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",

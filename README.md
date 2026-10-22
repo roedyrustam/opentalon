@@ -95,7 +95,7 @@ cd opentalon
 # Install all dependencies
 pnpm install
 
-# Run comprehensive test suite (50 tests across 11 test suites)
+# Run comprehensive test suite (69 tests across 11 test suites)
 pnpm test
 
 # Build all packages
@@ -221,7 +221,7 @@ pnpm test
 pnpm vitest run --coverage
 ```
 - **11 test suites** covering Core Router, libSQL Memory, Sandboxed VMs, Virtual Filesystem, Skill Versioning, MCP Protocols, Swarm Topologies, and SSE Gateway.
-- **50 passing tests** with 100% type safety (`noUnusedLocals: true`, ESM strict mode).
+- **69 passing tests** with 100% type safety (`noUnusedLocals: true`, ESM strict mode).
 
 ---
 

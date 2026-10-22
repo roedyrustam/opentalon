@@ -2,7 +2,17 @@
   "name": "opentalon-monorepo",
   "version": "0.1.0",
   "private": true,
-  "description": "OpenTalon - Next-Generation AI Agent Framework with Dual-Brain Architecture and Zero-Trust Sandbox",
+  "description": "OpenTalon - Next-Generation AI Agent Framework combining Hermes self-evolving procedural memory and OpenClaw token frugality with Zero-Trust sandbox",
+  "author": "Roedy Rustam <roedyrustam.id@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/roedyrustam/opentalon.git"
+  },
+  "homepage": "https://github.com/roedyrustam/opentalon#readme",
+  "bugs": {
+    "url": "https://github.com/roedyrustam/opentalon/issues"
+  },
   "type": "module",
   "scripts": {
     "talon": "node packages/cli/dist/index.js",
