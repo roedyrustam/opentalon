@@ -112,10 +112,25 @@ export interface IMemoryPort {
     topK?: number
   ): Promise<HybridSearchResult<ProceduralSkill>[]>;
   deleteSkill(id: string): Promise<boolean>;
+  getSkillRevisions(name: string): Promise<SkillRevision[]>;
+  rollbackSkill(name: string, targetVersionOrHash: string): Promise<ProceduralSkill>;
 
   // Snapshot Migration & Backup
   exportSnapshot(options?: { includeTraces?: boolean }): Promise<MemorySnapshot>;
   importSnapshot(snapshot: MemorySnapshot, options?: { overwrite?: boolean }): Promise<ImportSnapshotResult>;
+}
+
+export interface SkillRevision {
+  id: string;
+  skillId: string;
+  name: string;
+  version: string;
+  description: string;
+  capabilities: SkillCapabilities;
+  code: string;
+  testCases?: string;
+  hash: string;
+  timestamp: number;
 }
 
 export interface MemorySnapshot {

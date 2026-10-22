@@ -991,6 +991,54 @@ skillsCommand
     console.log(`🗑️ Successfully removed skill: ${skill.name} (${skill.id})`);
   });
 
+skillsCommand
+  .command('history <skillName>')
+  .description('View chronological revision history and audit log for a procedural skill')
+  .action(async (skillName: string) => {
+    const { memory } = getComponents();
+    await memory.initialize();
+
+    const revisions = await memory.getSkillRevisions(skillName);
+    await memory.close();
+
+    console.log(`\n📜 Revision History for Skill "${skillName}" (${revisions.length} revision(s)):`);
+    if (revisions.length === 0) {
+      console.log('   No revision records found for this skill.');
+      return;
+    }
+
+    for (let i = 0; i < revisions.length; i++) {
+      const rev = revisions[i];
+      const isLatest = i === 0 ? ' [CURRENT/ACTIVE]' : '';
+      console.log(`\n  • Revision #${revisions.length - i}: v${rev.version}${isLatest}`);
+      console.log(`    Date:         ${new Date(rev.timestamp).toISOString()}`);
+      console.log(`    Hash:         ${rev.hash}`);
+      console.log(`    Description:  ${rev.description}`);
+      console.log(`    Capabilities: ${JSON.stringify(rev.capabilities)}`);
+    }
+    console.log('\n💡 Roll back anytime using: talon skills rollback <skillName> <version|hash>\n');
+  });
+
+skillsCommand
+  .command('rollback <skillName> <target>')
+  .description('Roll back a procedural skill to a previous version, hash, or revision ID')
+  .action(async (skillName: string, target: string) => {
+    const { memory } = getComponents();
+    await memory.initialize();
+
+    try {
+      console.log(`🔄 Rolling back skill "${skillName}" to revision matching "${target}"...`);
+      const restored = await memory.rollbackSkill(skillName, target);
+      console.log(`✅ Successfully restored skill "${restored.name}" to v${restored.version} [Hash: ${restored.hash.slice(0, 10)}...]`);
+      console.log(`   Description: ${restored.description}`);
+    } catch (err: unknown) {
+      console.error('❌ Rollback failed:', err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    } finally {
+      await memory.close();
+    }
+  });
+
 // 10. `talon memory`
 const memoryCommand = program.command('memory').description('Manage long-term semantic facts & agent preferences');
 

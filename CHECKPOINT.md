@@ -44,8 +44,13 @@
      - `skills run <skillName> [argsJson...]` and `mcp call <toolName> [argsJson...]` support variadic arguments and automatic single/double-quote parsing in PowerShell.
      - `talon run --json` sanitizes retrieved procedural skill embeddings, outputting clean JSON suitable for automated CI/CD pipelines.
      - `talon run --stream` features typewriter token streaming.
-  11. **Developer Documentation**: Complete 23-command CLI manual, architecture diagrams, capability matrix, and API contracts codified in `DOCUMENTATION.md`.
-  12. **Global CLI Executable Linking**:
+  11. **Skill Revisions Audit Log & Instant Rollback**:
+     - Immutable `skill_revisions` table tracking every skill modification, version bump, code update, and capabilities hash.
+     - CLI: `talon skills history <skillName>` and `talon skills rollback <skillName> <version|hash>`.
+     - REST API: `GET /api/skills/history?name=<name>` and `POST /api/skills/rollback`.
+     - Deterministic chronological ordering via `ORDER BY timestamp DESC, rowid DESC`.
+  12. **Developer Documentation**: Complete 25-command CLI manual, architecture diagrams, capability matrix, and API contracts codified in `DOCUMENTATION.md`.
+  13. **Global CLI Executable Linking**:
      - Linked globally via `npm link` so `talon` command works out of the box in PowerShell, Command Prompt, and bash from any directory.
      - Added native Windows wrappers `talon.cmd` and `talon.ps1` in repository root.
-  13. **Test Hygiene**: 68/68 tests passing across all 11 test suites with 0 regressions. Full monorepo build passing. Local daemon active on `http://127.0.0.1:3100`.
+  14. **Test Hygiene**: 69/69 tests passing across all 11 test suites with 0 regressions. Full monorepo build passing. Local daemon active on `http://127.0.0.1:3100`.

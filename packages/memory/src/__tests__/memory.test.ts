@@ -241,5 +241,50 @@ describe('LibSqlMemoryAdapter (In-Memory Engine)', () => {
 
     await targetAdapter.close();
   });
+
+  it('tracks skill revisions and supports rolling back to previous versions', async () => {
+    // 1. Save version 1.0.0
+    await adapter.saveSkill({
+      id: 'skill-rev-1',
+      name: 'format_date',
+      description: 'Formats date to ISO string',
+      capabilities: {},
+      version: '1.0.0',
+      code: 'export default function run(args) { return { date: new Date(args.ts).toISOString() }; }',
+      hash: 'hash-v1',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    // 2. Save version 2.0.0
+    await adapter.saveSkill({
+      id: 'skill-rev-1',
+      name: 'format_date',
+      description: 'Formats date to UTC string (v2)',
+      capabilities: {},
+      version: '2.0.0',
+      code: 'export default function run(args) { return { date: new Date(args.ts).toUTCString() }; }',
+      hash: 'hash-v2',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    // 3. Verify revisions recorded
+    const revisions = await adapter.getSkillRevisions('format_date');
+    expect(revisions.length).toBeGreaterThanOrEqual(2);
+    expect(revisions[0].version).toBe('2.0.0');
+    expect(revisions[1].version).toBe('1.0.0');
+
+    // 4. Rollback to version 1.0.0
+    const restored = await adapter.rollbackSkill('format_date', '1.0.0');
+    expect(restored.version).toBe('1.0.0');
+    expect(restored.description).toBe('Formats date to ISO string');
+
+    // Current active skill in store should be restored 1.0.0
+    const activeSkill = await adapter.getSkill('format_date');
+    expect(activeSkill?.version).toBe('1.0.0');
+    expect(activeSkill?.code).toContain('toISOString()');
+  });
 });
+
 

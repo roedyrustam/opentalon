@@ -9,6 +9,7 @@ import {
   type SkillCapabilities,
   type MemorySnapshot,
   type ImportSnapshotResult,
+  type SkillRevision,
 } from './types.js';
 import { cosineSimilarity, reciprocalRankFusion, type RankedItem } from './rrf.js';
 
@@ -69,6 +70,25 @@ export class LibSqlMemoryAdapter implements IMemoryPort {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
+    `);
+
+    // Skill Revisions Table (Immutable Audit & Rollback History)
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS skill_revisions (
+        id TEXT PRIMARY KEY,
+        skill_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        version TEXT NOT NULL,
+        description TEXT NOT NULL,
+        capabilities TEXT NOT NULL,
+        code TEXT NOT NULL,
+        test_cases TEXT,
+        hash TEXT NOT NULL,
+        timestamp INTEGER NOT NULL
+      );
+    `);
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_revisions_name ON skill_revisions(name, timestamp DESC);
     `);
 
     // FTS5 Virtual Table for full-text search on skills
@@ -406,6 +426,32 @@ export class LibSqlMemoryAdapter implements IMemoryPort {
     } catch {
       // Ignore if FTS5 is not available
     }
+
+    // Record immutable revision audit
+    try {
+      const revisionId = `rev_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      await this.client.execute({
+        sql: `
+          INSERT INTO skill_revisions (
+            id, skill_id, name, version, description, capabilities, code, test_cases, hash, timestamp
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        `,
+        args: [
+          revisionId,
+          skill.id,
+          skill.name,
+          skill.version,
+          skill.description,
+          capabilitiesStr,
+          skill.code,
+          skill.testCases || null,
+          skill.hash,
+          skill.updatedAt || Date.now(),
+        ],
+      });
+    } catch {
+      // Non-blocking revision recording
+    }
   }
 
   public async getSkill(idOrName: string): Promise<ProceduralSkill | null> {
@@ -444,6 +490,62 @@ export class LibSqlMemoryAdapter implements IMemoryPort {
     }
 
     return (result.rowsAffected ?? 0) > 0;
+  }
+
+  public async getSkillRevisions(name: string): Promise<SkillRevision[]> {
+    await this.initialize();
+    const result = await this.client.execute({
+      sql: `SELECT * FROM skill_revisions WHERE name = ? ORDER BY timestamp DESC, rowid DESC;`,
+      args: [name],
+    });
+
+    return result.rows.map((r) => ({
+      id: r.id as string,
+      skillId: r.skill_id as string,
+      name: r.name as string,
+      version: r.version as string,
+      description: r.description as string,
+      capabilities: JSON.parse(r.capabilities as string),
+      code: r.code as string,
+      testCases: r.test_cases ? (r.test_cases as string) : undefined,
+      hash: r.hash as string,
+      timestamp: Number(r.timestamp),
+    }));
+  }
+
+  public async rollbackSkill(name: string, targetVersionOrHash: string): Promise<ProceduralSkill> {
+    await this.initialize();
+    const result = await this.client.execute({
+      sql: `
+        SELECT * FROM skill_revisions 
+        WHERE name = ? AND (version = ? OR hash LIKE ? OR id = ?)
+        ORDER BY timestamp DESC, rowid DESC
+        LIMIT 1;
+      `,
+      args: [name, targetVersionOrHash, `${targetVersionOrHash}%`, targetVersionOrHash],
+    });
+
+    if (result.rows.length === 0) {
+      throw new Error(`Revision "${targetVersionOrHash}" not found for skill "${name}"`);
+    }
+
+    const rev = result.rows[0];
+    const restoredSkill: ProceduralSkill = {
+      id: rev.skill_id as string,
+      name: rev.name as string,
+      description: rev.description as string,
+      capabilities: JSON.parse(rev.capabilities as string),
+      version: rev.version as string,
+      code: rev.code as string,
+      testCases: rev.test_cases ? (rev.test_cases as string) : undefined,
+      hash: rev.hash as string,
+      createdAt: Number(rev.timestamp),
+      updatedAt: Date.now(),
+    };
+
+    // Save will also record a new revision entry representing the rollback action
+    await this.saveSkill(restoredSkill);
+    return restoredSkill;
   }
 
   /**

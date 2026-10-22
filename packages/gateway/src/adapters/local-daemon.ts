@@ -190,6 +190,50 @@ export class LocalDaemonAdapter {
           return;
         }
 
+        // 5a-3. Skill Revision History API
+        if (req.method === 'GET' && url.pathname === '/api/skills/history') {
+          try {
+            const name = url.searchParams.get('name');
+            if (!name) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Missing "name" query parameter' }));
+              return;
+            }
+            const revisions = await this.router.getMemory().getSkillRevisions(name);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(revisions));
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+          return;
+        }
+
+        // 5a-4. Skill Rollback API
+        if (req.method === 'POST' && url.pathname === '/api/skills/rollback') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const payload = JSON.parse(body) as { name: string; target: string };
+              if (!payload.name || !payload.target) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Missing "name" or "target" in request body' }));
+                return;
+              }
+              const restoredSkill = await this.router.getMemory().rollbackSkill(payload.name, payload.target);
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: true, restoredSkill }));
+            } catch (err: unknown) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: String(err) }));
+            }
+          });
+          return;
+        }
+
         // 5b. Semantic Facts API
         if (req.method === 'GET' && url.pathname === '/api/facts') {
           try {
