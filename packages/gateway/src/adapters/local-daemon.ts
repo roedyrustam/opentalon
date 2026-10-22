@@ -11,6 +11,7 @@ import {
 import { type GatewayRequestPayload, type GatewayResponsePayload } from '../types.js';
 import { getDashboardHtml } from '../dashboard/html.js';
 import { SseStreamAdapter } from './sse-stream.js';
+import { RemoteSkillInstaller } from '@opentalon/skill-engine';
 
 export interface LocalDaemonOptions {
   port?: number;
@@ -229,6 +230,37 @@ export class LocalDaemonAdapter {
             } catch (err: unknown) {
               res.writeHead(500, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ error: String(err) }));
+            }
+          });
+          return;
+        }
+
+        // 5a-5. Remote Skill Install API
+        if (req.method === 'POST' && url.pathname === '/api/skills/install') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const payload = JSON.parse(body) as { url: string; overwrite?: boolean; force?: boolean };
+              if (!payload.url) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Missing "url" in request body' }));
+                return;
+              }
+              const installResult = await RemoteSkillInstaller.install(
+                payload.url,
+                this.router.getMemory(),
+                undefined,
+                { overwrite: payload.overwrite, force: payload.force }
+              );
+              const statusCode = installResult.success ? 200 : 400;
+              res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify(installResult));
+            } catch (err: unknown) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
             }
           });
           return;

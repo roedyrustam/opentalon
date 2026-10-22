@@ -21,7 +21,7 @@ import {
   type CascadeProvider,
 } from '@opentalon/core';
 import { LibSqlMemoryAdapter } from '@opentalon/memory';
-import { SandboxedVmRunner } from '@opentalon/skill-engine';
+import { SandboxedVmRunner, RemoteSkillInstaller } from '@opentalon/skill-engine';
 import { LocalDaemonAdapter } from '@opentalon/gateway';
 
 // Automatically discover and load .env from workspace or parent directories
@@ -945,6 +945,54 @@ skillsCommand
     } catch (err: unknown) {
       console.error('❌ Failed to register skill:', err instanceof Error ? err.message : String(err));
       process.exit(1);
+    }
+  });
+
+skillsCommand
+  .command('install <urlOrTarget>')
+  .description('Download, security audit, verify, and register a skill from a remote URL, GitHub, or Gist')
+  .option('--overwrite', 'Overwrite existing skill with same name', false)
+  .option('--force', 'Bypass capability safety audit warnings', false)
+  .action(async (urlOrTarget: string, options: { overwrite: boolean; force: boolean }) => {
+    const { memory } = getComponents();
+    await memory.initialize();
+
+    console.log(`\n📦 Fetching remote skill from: ${urlOrTarget}...`);
+    try {
+      const normalized = RemoteSkillInstaller.normalizeUrl(urlOrTarget);
+      if (normalized !== urlOrTarget) {
+        console.log(`🔗 Normalized target: ${normalized}`);
+      }
+
+      console.log('🛡️ Performing Zero-Trust capability audit...');
+      console.log('🧪 Verifying execution isolate in sandbox...');
+
+      const result = await RemoteSkillInstaller.install(urlOrTarget, memory, undefined, {
+        overwrite: options.overwrite,
+        force: options.force,
+      });
+
+      if (!result.success) {
+        console.error(`\n❌ Installation failed: ${result.error}\n`);
+        await memory.close();
+        process.exit(1);
+      }
+
+      console.log(`\n========================================`);
+      console.log(`✅ Successfully Installed Skill: \x1b[32m${result.skillName}\x1b[0m (v${result.version})`);
+      console.log(`========================================`);
+      console.log(`Description: ${result.description}`);
+      console.log(`Source:      ${result.sourceUrl}`);
+      console.log(`Hash:        ${result.hash?.slice(0, 16)}...`);
+      if (result.audit.warnings.length > 0) {
+        console.log(`⚠️ Warnings:  ${result.audit.warnings.join(' | ')}`);
+      }
+      console.log(`\n💡 Ready for execution via: "talon skills run ${result.skillName}"\n`);
+    } catch (err: unknown) {
+      console.error('\n❌ Installation error:', err instanceof Error ? err.message : String(err), '\n');
+      process.exit(1);
+    } finally {
+      await memory.close();
     }
   });
 

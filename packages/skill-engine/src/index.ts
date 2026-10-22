@@ -5,3 +5,4 @@ export * from './sandbox/quickjs-sandbox.js';
 export * from './parser/skill-markdown.js';
 export * from './versioning/skill-version-manager.js';
 export * from './synthesizer/skill-synthesizer.js';
+export * from './installer/remote-skill-installer.js';

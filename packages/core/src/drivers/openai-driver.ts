@@ -1,4 +1,4 @@
-import { type ILLMPort, type LLMRequest, type LLMResponse } from '../types.js';
+import { type ILLMPort, type LLMRequest, type LLMResponse, type StreamChunk } from '../types.js';
 
 export interface OpenAIDriverOptions {
   apiKey?: string;
@@ -99,6 +99,130 @@ export class OpenAIDriver implements ILLMPort {
       },
       model: this.model,
     };
+  }
+
+  public async *streamContent(request: LLMRequest): AsyncIterable<StreamChunk> {
+    const url = `${this.baseURL}/chat/completions`;
+    const messages = [...request.messages];
+
+    if (request.systemInstruction) {
+      messages.unshift({ role: 'system', content: request.systemInstruction });
+    }
+
+    const payload: Record<string, unknown> = {
+      model: this.model,
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      temperature: request.temperature ?? 0.7,
+      stream: true,
+      stream_options: { include_usage: true },
+    };
+
+    if (request.tools && request.tools.length > 0) {
+      payload.tools = request.tools.map((t) => ({
+        type: 'function',
+        function: { name: t.name, description: t.description, parameters: t.parameters },
+      }));
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      yield { type: 'error', error: `OpenAI Streaming Error (${response.status}): ${err}` };
+      return;
+    }
+
+    if (!response.body) {
+      yield { type: 'error', error: 'OpenAI streaming response has no body' };
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith(':')) continue;
+
+          if (trimmed.startsWith('data: ')) {
+            const jsonStr = trimmed.slice(6);
+            if (jsonStr === '[DONE]') continue;
+
+            try {
+              const chunk = JSON.parse(jsonStr) as {
+                choices?: Array<{
+                  delta?: {
+                    content?: string;
+                    tool_calls?: Array<{
+                      index: number;
+                      id?: string;
+                      function?: { name?: string; arguments?: string };
+                    }>;
+                  };
+                }>;
+                usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+              };
+
+              const delta = chunk.choices?.[0]?.delta;
+              if (delta?.content) {
+                yield { type: 'text_delta', textDelta: delta.content, model: this.model };
+              }
+
+              if (delta?.tool_calls) {
+                for (const tc of delta.tool_calls) {
+                  if (tc.id && tc.function?.name) {
+                    yield {
+                      type: 'tool_call',
+                      toolCall: {
+                        id: tc.id,
+                        name: tc.function.name,
+                        args: tc.function.arguments ? JSON.parse(tc.function.arguments) : {},
+                      },
+                      model: this.model,
+                    };
+                  }
+                }
+              }
+
+              if (chunk.usage) {
+                yield {
+                  type: 'usage',
+                  usage: {
+                    promptTokens: chunk.usage.prompt_tokens,
+                    completionTokens: chunk.usage.completion_tokens,
+                    totalTokens: chunk.usage.total_tokens,
+                  },
+                  model: this.model,
+                };
+              }
+            } catch {
+              // Skip malformed chunks
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    yield { type: 'done', model: this.model };
   }
 
   public async createEmbedding(text: string): Promise<number[]> {

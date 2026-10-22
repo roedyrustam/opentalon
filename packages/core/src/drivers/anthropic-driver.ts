@@ -1,4 +1,4 @@
-import { type ILLMPort, type LLMRequest, type LLMResponse } from '../types.js';
+import { type ILLMPort, type LLMRequest, type LLMResponse, type StreamChunk } from '../types.js';
 
 export interface AnthropicDriverOptions {
   apiKey?: string;
@@ -170,6 +170,118 @@ export class AnthropicDriver implements ILLMPort {
       },
       model: this.model,
     };
+  }
+
+  public async *streamContent(request: LLMRequest): AsyncIterable<StreamChunk> {
+    const url = `${this.baseURL}/messages`;
+
+    const messages: Array<{ role: 'user' | 'assistant'; content: string | Array<Record<string, unknown>> }> = [];
+    for (const m of request.messages) {
+      if (m.role === 'system') continue;
+      messages.push({ role: m.role as 'user' | 'assistant', content: m.content });
+    }
+    if (messages.length === 0) {
+      messages.push({ role: 'user', content: 'Hello' });
+    }
+
+    const payload: Record<string, unknown> = {
+      model: this.model,
+      messages,
+      max_tokens: request.maxTokens || this.maxTokens,
+      temperature: request.temperature ?? 0.7,
+      stream: true,
+    };
+
+    if (request.systemInstruction) {
+      payload.system = request.systemInstruction;
+    }
+
+    if (request.tools && request.tools.length > 0) {
+      payload.tools = request.tools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        input_schema: t.parameters,
+      }));
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': this.apiKey,
+        'anthropic-version': this.anthropicVersion,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      yield { type: 'error', error: `Anthropic Streaming Error (${response.status}): ${err}` };
+      return;
+    }
+
+    if (!response.body) {
+      yield { type: 'error', error: 'Anthropic streaming response has no body' };
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith(':')) continue;
+
+          if (trimmed.startsWith('data: ')) {
+            const jsonStr = trimmed.slice(6);
+            try {
+              const event = JSON.parse(jsonStr) as {
+                type: string;
+                delta?: { type?: string; text?: string; thinking?: string };
+                content_block?: { type?: string; id?: string; name?: string };
+                usage?: { input_tokens?: number; output_tokens?: number };
+              };
+
+              if (event.type === 'content_block_delta') {
+                if (event.delta?.type === 'text_delta' && event.delta.text) {
+                  yield { type: 'text_delta', textDelta: event.delta.text, model: this.model };
+                } else if (event.delta?.type === 'thinking_delta' && event.delta.thinking) {
+                  yield { type: 'thinking_delta', thinkingDelta: event.delta.thinking, model: this.model };
+                }
+              } else if (event.type === 'message_delta' && event.usage) {
+                yield {
+                  type: 'usage',
+                  usage: {
+                    promptTokens: event.usage.input_tokens || 0,
+                    completionTokens: event.usage.output_tokens || 0,
+                    totalTokens: (event.usage.input_tokens || 0) + (event.usage.output_tokens || 0),
+                  },
+                  model: this.model,
+                };
+              } else if (event.type === 'message_stop') {
+                // Final event
+              }
+            } catch {
+              // Skip malformed chunks
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    yield { type: 'done', model: this.model };
   }
 
   public async createEmbedding(text: string): Promise<number[]> {

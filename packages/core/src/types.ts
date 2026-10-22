@@ -53,9 +53,29 @@ export interface LLMResponse {
   thinkingContent?: string;
 }
 
+export interface StreamChunk {
+  type: 'text_delta' | 'thinking_delta' | 'tool_call' | 'usage' | 'error' | 'done';
+  textDelta?: string;
+  thinkingDelta?: string;
+  toolCall?: {
+    id: string;
+    name: string;
+    args: Record<string, unknown>;
+  };
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  model?: string;
+  error?: string;
+}
+
 export interface ILLMPort {
   generateContent(request: LLMRequest): Promise<LLMResponse>;
   createEmbedding(text: string): Promise<number[]>;
+  /** Real token-by-token streaming. Optional — drivers that don't support it return undefined. */
+  streamContent?(request: LLMRequest): AsyncIterable<StreamChunk>;
 }
 
 export interface FastPathOptions {

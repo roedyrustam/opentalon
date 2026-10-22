@@ -1,4 +1,4 @@
-import { type ILLMPort, type LLMRequest, type LLMResponse } from '../types.js';
+import { type ILLMPort, type LLMRequest, type LLMResponse, type StreamChunk } from '../types.js';
 
 export interface GeminiDriverOptions {
   apiKey?: string;
@@ -155,6 +155,145 @@ export class GeminiDriver implements ILLMPort {
       },
       model,
     };
+  }
+
+  public async *streamContent(request: LLMRequest): AsyncIterable<StreamChunk> {
+    yield* this.streamModel(this.primaryModel, request);
+  }
+
+  private async *streamModel(model: string, request: LLMRequest): AsyncIterable<StreamChunk> {
+    const url = `${this.apiEndpoint}/models/${model}:streamGenerateContent?alt=sse&key=${this.apiKey}`;
+
+    const contents = request.messages.map((msg) => ({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: msg.content }],
+    }));
+
+    const bodyPayload: Record<string, unknown> = { contents };
+
+    if (request.systemInstruction) {
+      bodyPayload.systemInstruction = { parts: [{ text: request.systemInstruction }] };
+    }
+
+    if (request.thinkingConfig?.thinkingBudget) {
+      bodyPayload.generationConfig = {
+        thinkingConfig: { thinkingBudget: request.thinkingConfig.thinkingBudget },
+      };
+    }
+
+    if (request.cachedContentId) {
+      bodyPayload.cachedContent = request.cachedContentId;
+    }
+
+    if (request.tools && request.tools.length > 0) {
+      bodyPayload.tools = [{
+        functionDeclarations: request.tools.map((t) => ({
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        })),
+      }];
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyPayload),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      yield { type: 'error', error: `Gemini Streaming Error (${response.status}): ${errText}` };
+      return;
+    }
+
+    if (!response.body) {
+      yield { type: 'error', error: 'Gemini streaming response has no body' };
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith(':')) continue;
+
+          if (trimmed.startsWith('data: ')) {
+            const jsonStr = trimmed.slice(6);
+            if (jsonStr === '[DONE]') continue;
+
+            try {
+              const chunk = JSON.parse(jsonStr) as {
+                candidates?: Array<{
+                  content?: {
+                    parts?: Array<{
+                      text?: string;
+                      thought?: string;
+                      functionCall?: { name: string; args: Record<string, unknown> };
+                    }>;
+                  };
+                }>;
+                usageMetadata?: {
+                  promptTokenCount?: number;
+                  candidatesTokenCount?: number;
+                  totalTokenCount?: number;
+                };
+              };
+
+              const parts = chunk.candidates?.[0]?.content?.parts || [];
+              for (const part of parts) {
+                if (part.text) {
+                  yield { type: 'text_delta', textDelta: part.text, model };
+                }
+                if (part.thought) {
+                  yield { type: 'thinking_delta', thinkingDelta: part.thought, model };
+                }
+                if (part.functionCall) {
+                  yield {
+                    type: 'tool_call',
+                    toolCall: {
+                      id: `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                      name: part.functionCall.name,
+                      args: part.functionCall.args,
+                    },
+                    model,
+                  };
+                }
+              }
+
+              if (chunk.usageMetadata) {
+                yield {
+                  type: 'usage',
+                  usage: {
+                    promptTokens: chunk.usageMetadata.promptTokenCount || 0,
+                    completionTokens: chunk.usageMetadata.candidatesTokenCount || 0,
+                    totalTokens: chunk.usageMetadata.totalTokenCount || 0,
+                  },
+                  model,
+                };
+              }
+            } catch {
+              // Skip malformed JSON chunks
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    yield { type: 'done', model };
   }
 
   public async createEmbedding(text: string): Promise<number[]> {
