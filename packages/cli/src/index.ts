@@ -18,6 +18,38 @@ import { LibSqlMemoryAdapter } from '@opentalon/memory';
 import { SandboxedVmRunner } from '@opentalon/skill-engine';
 import { LocalDaemonAdapter } from '@opentalon/gateway';
 
+// Automatically discover and load .env from workspace or parent directories
+function loadEnv() {
+  const envCandidates = [
+    path.resolve(process.cwd(), '.env'),
+    path.resolve(process.cwd(), '..', '.env'),
+    path.resolve(process.cwd(), '..', '..', '.env'),
+  ];
+  for (const envPath of envCandidates) {
+    if (fs.existsSync(envPath)) {
+      try {
+        const content = fs.readFileSync(envPath, 'utf8');
+        for (const line of content.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith('#')) continue;
+          const eqIdx = trimmed.indexOf('=');
+          if (eqIdx !== -1) {
+            const key = trimmed.slice(0, eqIdx).trim();
+            const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '');
+            if (!process.env[key] && val) {
+              process.env[key] = val;
+            }
+          }
+        }
+        break;
+      } catch {
+        // silent fallback
+      }
+    }
+  }
+}
+loadEnv();
+
 const program = new Command();
 
 program
@@ -34,12 +66,12 @@ function getComponents(dbPath = 'opentalon.db') {
   let llm;
   if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
     llm = new GeminiDriver({
-      primaryModel: process.env.TALON_MODEL || 'gemini-2.5-pro',
-      fallbackModel: 'gemini-2.5-flash',
+      primaryModel: process.env.GEMINI_MODEL || process.env.TALON_MODEL || 'gemini-3.5-flash-lite',
+      fallbackModel: process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.8-flash',
     });
   } else if (process.env.OPENAI_API_KEY) {
     llm = new OpenAIDriver({
-      model: process.env.TALON_MODEL || 'gpt-4o-mini',
+      model: process.env.OPENAI_MODEL || process.env.TALON_MODEL || 'gpt-4o-mini',
     });
   } else {
     console.warn('[WARN] No GEMINI_API_KEY or OPENAI_API_KEY found. Running in offline Mock LLM mode.');

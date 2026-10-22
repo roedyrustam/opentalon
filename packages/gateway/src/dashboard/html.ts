@@ -394,6 +394,23 @@ export function getDashboardHtml(): string {
           <p style="margin-top: 0.5rem;">• <strong>Slow Path:</strong> Runs non-blocking background reflection with Gemini System-2 Deep Thinking to diagnose failures, extract reusable heuristics, and autonomously commit self-healed <code>SKILL.md</code> files.</p>
         </div>
       </div>
+
+      <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <span>Autonomous Cognitive Evolution (Hermes Slow Path)</span>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <span id="evolution-status-badge" class="badge badge-success">Idle</span>
+            <button class="btn" id="run-evolution-btn" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; background: linear-gradient(135deg, #d946ef, #8b5cf6);" onclick="runManualEvolution()">Trigger Evolution Cycle</button>
+          </div>
+        </div>
+        <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+          The Slow Path autonomously inspects failure traces, clusters frequent unhandled prompts, triggers heuristic reflection, and synthesizes new skills or patches existing ones under Zero-Trust sandbox verification.
+        </p>
+        <div id="evolution-report-box" style="display: none; margin-top: 1rem; border-top: 1px solid var(--card-border); padding-top: 1rem;">
+          <div style="font-weight: 700; color: #d946ef; font-size: 0.85rem; margin-bottom: 0.5rem;">Latest Evolution Report:</div>
+          <pre id="evolution-report-pre" style="max-height: 240px;"></pre>
+        </div>
+      </div>
     </section>
 
     <!-- TAB 2: EPISODIC TRACES -->
@@ -424,10 +441,28 @@ export function getDashboardHtml(): string {
 
     <!-- TAB 3: PROCEDURAL SKILLS -->
     <section id="skills" class="tab-content">
+      <div class="card" id="new-skill-card" style="display: none; margin-bottom: 1.5rem;">
+        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Register New Skill (SKILL.md)</span>
+          <button class="btn" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; background: #374151;" onclick="closeNewSkillModal()">Cancel</button>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+          Paste a complete <code>SKILL.md</code> definition (with YAML frontmatter, capabilities, and JavaScript implementation). It will be statically validated, tested in the Zero-Trust Sandbox, and registered into procedural memory:
+        </p>
+        <textarea id="new-skill-markdown" style="width: 100%; height: 220px; background: #0d131f; border: 1px solid var(--card-border); color: #fff; padding: 0.75rem; border-radius: 8px; font-family: var(--font-mono); font-size: 0.85rem; margin-bottom: 0.75rem;" placeholder="---&#10;name: my_new_skill&#10;version: 1.0.0&#10;description: &quot;A new skill&quot;&#10;capabilities: {}&#10;---&#10;&#10;# my_new_skill&#10;Description...&#10;&#10;## Implementation&#10;&#96;&#96;&#96;javascript&#10;export default async function run(args) {&#10;  return { result: true };&#10;}&#10;&#96;&#96;&#96;"></textarea>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button class="btn" onclick="saveNewSkill()">Verify & Commit into Memory</button>
+          <div id="new-skill-status" style="font-size: 0.8rem; display: none;"></div>
+        </div>
+      </div>
+
       <div class="card">
-        <div class="card-title">
+        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
           <span>Registered Procedural Skills</span>
-          <button class="btn" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;" onclick="loadSkills()">Refresh</button>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; background: #10b981;" onclick="openNewSkillModal()">+ Register New Skill</button>
+            <button class="btn" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;" onclick="loadSkills()">Refresh</button>
+          </div>
         </div>
         <table>
           <thead>
@@ -737,6 +772,7 @@ export function getDashboardHtml(): string {
             <td class="tabular-nums" style="font-size: 0.75rem; color: var(--text-muted);">\${s.hash.slice(0, 12)}...</td>
             <td>
               <button class="btn" style="padding: 0.25rem 0.6rem; font-size: 0.725rem;" onclick="openTester('\${s.name}')">Test</button>
+              <button class="btn" style="background: #dc2626; padding: 0.25rem 0.6rem; font-size: 0.725rem; margin-left: 0.25rem;" onclick="deleteSkill('\${s.name}')">Delete</button>
             </td>
           </tr>
         \`).join('');
@@ -1282,9 +1318,133 @@ export function getDashboardHtml(): string {
       draw3D();
     }
 
+    function openNewSkillModal() {
+      document.getElementById('new-skill-card').style.display = 'block';
+      document.getElementById('new-skill-markdown').focus();
+    }
+
+    function closeNewSkillModal() {
+      document.getElementById('new-skill-card').style.display = 'none';
+      document.getElementById('new-skill-status').style.display = 'none';
+    }
+
+    async function saveNewSkill() {
+      const md = document.getElementById('new-skill-markdown').value.trim();
+      const statusDiv = document.getElementById('new-skill-status');
+      if (!md) {
+        alert('Please provide SKILL.md markdown content.');
+        return;
+      }
+      statusDiv.style.display = 'block';
+      statusDiv.style.color = '#38bdf8';
+      statusDiv.innerText = 'Validating and compiling in Zero-Trust Sandbox...';
+
+      try {
+        const res = await fetch('/api/skills', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ markdown: md }),
+        });
+        const data = await res.json();
+        if (data.error) {
+          statusDiv.style.color = '#ef4444';
+          statusDiv.innerText = 'Error: ' + data.error;
+          return;
+        }
+
+        statusDiv.style.color = '#34d399';
+        statusDiv.innerText = 'Skill ' + data.skill.name + ' successfully registered!';
+        document.getElementById('new-skill-markdown').value = '';
+        setTimeout(() => closeNewSkillModal(), 2000);
+        loadSkills();
+        loadStats();
+      } catch (e) {
+        statusDiv.style.color = '#ef4444';
+        statusDiv.innerText = 'Registration failed: ' + e.message;
+      }
+    }
+
+    async function deleteSkill(skillName) {
+      if (!confirm('Are you sure you want to delete procedural skill "' + skillName + '"?')) return;
+      try {
+        const res = await fetch('/api/skills?name=' + encodeURIComponent(skillName), { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          loadSkills();
+          loadStats();
+        } else {
+          alert('Could not delete skill: ' + (data.error || 'Unknown'));
+        }
+      } catch (e) {
+        alert('Delete failed: ' + e.message);
+      }
+    }
+
+    async function runManualEvolution() {
+      const btn = document.getElementById('run-evolution-btn');
+      const badge = document.getElementById('evolution-status-badge');
+      const box = document.getElementById('evolution-report-box');
+      const pre = document.getElementById('evolution-report-pre');
+
+      btn.disabled = true;
+      btn.innerText = 'Evolving...';
+      badge.className = 'badge badge-purple';
+      badge.innerText = 'Evolution In Flight';
+      box.style.display = 'block';
+      pre.innerText = 'Scanning episodic traces and extracting heuristics...';
+
+      try {
+        const res = await fetch('/api/evolution/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ limit: 50, dryRun: false }),
+        });
+        const report = await res.json();
+        pre.innerText = JSON.stringify(report, null, 2);
+        badge.className = 'badge badge-success';
+        badge.innerText = 'Evolution Completed';
+        loadSkills();
+        loadStats();
+      } catch (e) {
+        badge.className = 'badge badge-purple';
+        badge.innerText = 'Failed';
+        pre.innerText = 'Evolution error: ' + e.message;
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Trigger Evolution Cycle';
+      }
+    }
+
+    // Live Server-Sent Events (SSE) Bus
+    function initLiveEvents() {
+      if (!window.EventSource) return;
+      try {
+        const es = new EventSource('/api/events');
+        es.addEventListener('trace', () => {
+          loadStats();
+          const activeTab = document.querySelector('.tab-content.active')?.id;
+          if (activeTab === 'traces') loadTraces();
+        });
+        es.addEventListener('skill_registered', () => {
+          loadStats();
+          loadSkills();
+        });
+        es.addEventListener('evolution_completed', () => {
+          loadStats();
+          loadSkills();
+          const badge = document.getElementById('evolution-status-badge');
+          if (badge) {
+            badge.className = 'badge badge-success';
+            badge.innerText = 'Evolution Synced';
+          }
+        });
+      } catch (e) {}
+    }
+
     // Auto-load on startup
     loadStats();
     init3DHero();
+    initLiveEvents();
   </script>
 </body>
 </html>

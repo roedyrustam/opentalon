@@ -15,8 +15,8 @@ export class GeminiDriver implements ILLMPort {
 
   constructor(options: GeminiDriverOptions = {}) {
     this.apiKey = options.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
-    this.primaryModel = options.primaryModel || 'gemini-2.5-pro';
-    this.fallbackModel = options.fallbackModel || 'gemini-2.5-flash';
+    this.primaryModel = options.primaryModel || process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
+    this.fallbackModel = options.fallbackModel || process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.8-flash';
     this.apiEndpoint = options.apiEndpoint || 'https://generativelanguage.googleapis.com/v1beta';
   }
 
@@ -25,14 +25,18 @@ export class GeminiDriver implements ILLMPort {
       return await this.callModel(this.primaryModel, request);
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      // Invariant: Seamlessly degrade to fallback model on quota/rate limit or missing model
+      // Invariant: Seamlessly degrade to fallback model on quota, rate limit, missing model, or high demand
       if (
         errMsg.includes('429') ||
         errMsg.includes('RESOURCE_EXHAUSTED') ||
         errMsg.includes('404') ||
-        errMsg.includes('NOT_FOUND')
+        errMsg.includes('NOT_FOUND') ||
+        errMsg.includes('503') ||
+        errMsg.includes('high demand')
       ) {
-        return await this.callModel(this.fallbackModel, request);
+        if (this.primaryModel !== this.fallbackModel) {
+          return await this.callModel(this.fallbackModel, request);
+        }
       }
       throw err;
     }
@@ -154,12 +158,13 @@ export class GeminiDriver implements ILLMPort {
   }
 
   public async createEmbedding(text: string): Promise<number[]> {
-    const url = `${this.apiEndpoint}/models/text-embedding-004:embedContent?key=${this.apiKey}`;
+    const embedModel = process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001';
+    const url = `${this.apiEndpoint}/models/${embedModel}:embedContent?key=${this.apiKey}`;
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'models/text-embedding-004',
+        model: `models/${embedModel}`,
         content: { parts: [{ text }] },
       }),
     });

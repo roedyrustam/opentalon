@@ -135,6 +135,61 @@ export class LocalDaemonAdapter {
           return;
         }
 
+        // 5a-1. Register / Synthesize Skill API
+        if (req.method === 'POST' && url.pathname === '/api/skills') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const payload = JSON.parse(body) as { markdown?: string; skill?: any };
+              if (payload.markdown) {
+                const skill = await this.router.synthesizeAndRegisterSkill(payload.markdown);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, skill }));
+                return;
+              }
+              if (payload.skill) {
+                await this.router.getMemory().saveSkill(payload.skill);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, skill: payload.skill }));
+                return;
+              }
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Missing "markdown" or "skill" in request body' }));
+            } catch (err: unknown) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: String(err) }));
+            }
+          });
+          return;
+        }
+
+        // 5a-2. Delete Skill API
+        if (req.method === 'DELETE' && url.pathname === '/api/skills') {
+          try {
+            let id = url.searchParams.get('id');
+            const name = url.searchParams.get('name');
+            if (!id && name) {
+              const skill = await this.router.getMemory().getSkill(name);
+              id = skill?.id ?? null;
+            }
+            if (!id) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Missing "id" or "name" query parameter' }));
+              return;
+            }
+            const deleted = await this.router.getMemory().deleteSkill(id);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: deleted, id }));
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+          return;
+        }
+
         // 5b. Semantic Facts API
         if (req.method === 'GET' && url.pathname === '/api/facts') {
           try {
@@ -489,12 +544,98 @@ export class LocalDaemonAdapter {
           return;
         }
 
+        // 13. Slow Path Evolution Trigger API
+        if (req.method === 'POST' && url.pathname === '/api/evolution/run') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const payload = body ? JSON.parse(body) : {};
+              const limit = typeof payload.limit === 'number' ? payload.limit : 50;
+              const dryRun = Boolean(payload.dryRun);
+              const report = await this.router.getEvolutionEngine().runEvolutionCycle({
+                traceLimit: limit,
+                dryRun,
+              });
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify(report));
+            } catch (err: unknown) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: String(err) }));
+            }
+          });
+          return;
+        }
+
+        // 14. Slow Path Evolution Status API
+        if (req.method === 'GET' && url.pathname === '/api/evolution/status') {
+          try {
+            const engine = this.router.getEvolutionEngine();
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                isEvolving: this.router.getIsEvolving(),
+                queueLength: this.router.getTraceQueueLength(),
+                synthesesPastHour: engine.getSynthesesInPastHour(),
+              })
+            );
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+          return;
+        }
+
+        // 15. Server-Sent Events (SSE) Live Router Event Bus
+        if (req.method === 'GET' && url.pathname === '/api/events') {
+          res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache, no-transform',
+            Connection: 'keep-alive',
+          });
+
+          const sendSSE = (event: string, data: unknown) => {
+            res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+          };
+
+          sendSSE('connected', { timestamp: Date.now() });
+
+          const onTrace = (trace: any) =>
+            sendSSE('trace', { id: trace.id, input: trace.input, latencyMs: trace.latencyMs });
+          const onSlowStarted = (data: any) => sendSSE('evolution_started', data);
+          const onSlowCompleted = (report: any) => sendSSE('evolution_completed', report);
+          const onSlowError = (err: any) => sendSSE('evolution_error', { message: String(err) });
+          const onSkill = (skill: any) =>
+            sendSSE('skill_registered', { name: skill.name, version: skill.version });
+
+          this.router.on('trace:emitted', onTrace);
+          this.router.on('slowpath:started', onSlowStarted);
+          this.router.on('slowpath:completed', onSlowCompleted);
+          this.router.on('slowpath:error', onSlowError);
+          this.router.on('skill:registered', onSkill);
+
+          req.on('close', () => {
+            this.router.off('trace:emitted', onTrace);
+            this.router.off('slowpath:started', onSlowStarted);
+            this.router.off('slowpath:completed', onSlowCompleted);
+            this.router.off('slowpath:error', onSlowError);
+            this.router.off('skill:registered', onSkill);
+          });
+          return;
+        }
+
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Not found' }));
       });
 
       this.server.on('error', (err) => reject(err));
       this.server.listen(this.port, this.host, () => {
+        const addr = this.server?.address();
+        if (addr && typeof addr === 'object' && addr.port) {
+          this.port = addr.port;
+        }
         resolve(this.port);
       });
     });
@@ -503,6 +644,9 @@ export class LocalDaemonAdapter {
   public stop(): Promise<void> {
     return new Promise((resolve) => {
       if (this.server) {
+        if (typeof this.server.closeAllConnections === 'function') {
+          this.server.closeAllConnections();
+        }
         this.server.close(() => resolve());
       } else {
         resolve();

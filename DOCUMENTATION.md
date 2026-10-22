@@ -425,6 +425,8 @@ When running `talon serve` or `LocalDaemonAdapter`, the following endpoints are 
 | `POST` | `/v1/stream` | Server-Sent Events (SSE) streaming chat endpoint |
 | `GET` | `/api/stats` | Telemetry counters: skillsCount, tracesCount, factsCount, avgLatencyMs |
 | `GET` | `/api/skills` | List all registered procedural skills |
+| `POST` | `/api/skills` | Compile and commit a new procedural skill from markdown or JSON |
+| `DELETE` | `/api/skills?name=<name>` | Delete a skill from procedural memory and FTS5 index |
 | `POST` | `/api/skills/test` | Execute a skill directly in the Zero-Trust Sandbox (`{ name, args }`) |
 | `GET` | `/showcase` / `/3d` | Standalone 60FPS 3D Dynamic Holographic Core showcase |
 | `GET` | `/api/traces` | Retrieve the last 50 episodic execution traces |
@@ -434,6 +436,9 @@ When running `talon serve` or `LocalDaemonAdapter`, the following endpoints are 
 | `GET` | `/api/facts/search?q=<query>` | Full-text FTS5 keyword search across semantic memory |
 | `GET` | `/api/memory/export` | Download full memory snapshot as JSON (`?includeTraces=true`) |
 | `POST` | `/api/memory/import` | Import memory snapshot JSON into database (`{ overwrite: true }`) |
+| `POST` | `/api/evolution/run` | Trigger manual Hermes Slow Path cognitive evolution cycle |
+| `GET` | `/api/evolution/status` | Real-time cognitive evolution telemetry (status, queue, hourly syntheses) |
+| `GET` | `/api/events` | Real-time Server-Sent Events (SSE) router bus (`trace`, `skill`, `evolution`) |
 | `GET` | `/api/mcp/tools` | List MCP tools exposed by the gateway |
 | `POST` | `/api/mcp/rpc` | Model Context Protocol JSON-RPC 2.0 dispatch endpoint |
 | `POST` | `/api/mcp/import` | Auto-discover & synthesize skills from external HTTP MCP server |
@@ -488,9 +493,9 @@ OpenTalon includes a comprehensive test suite across all monorepo modules using 
 pnpm test
 ```
 
-### Test Coverage Highlights (65 Tests Across 11 Suites)
+### Test Coverage Highlights (68 Tests Across 11 Suites)
 - **`@opentalon/memory`**: Verified FTS5 full-text indexing, vector cosine distance, RRF score ordering, trace persistence, semantic facts knowledge store, and portable memory snapshot export & import.
 - **`@opentalon/core`**: Verified Fast Path token budget truncation (<1,500 tokens), semantic facts auto-retrieval and system prefix injection, adaptive tool error self-correction, LLM tool-calling loops, mock driver fallback, Circuit Breaker self-healing, FinOps hourly throttle, and Swarm multi-agent orchestration (Fan-Out/Fan-In, Pipeline Saga, Critic-Validator Loop).
 - **`@opentalon/skill-engine`**: Verified `SKILL.md` parsing, zero-trust sandbox execution, capability violation rejection, timeout interception, semantic versioning, and full verification across **10 production skills** in the gallery.
-- **`@opentalon/gateway`**: Verified local daemon HTTP routing (`/health`, `/v1/chat`, `/v1/stream`), error handling, serverless edge payloads, Web Cockpit Dashboard, Swarm dispatcher, facts API, and MCP JSON-RPC 2.0 endpoints.
+- **`@opentalon/gateway`**: Verified local daemon HTTP routing (`/health`, `/v1/chat`, `/v1/stream`), error handling, serverless edge payloads, Web Cockpit Dashboard, Swarm dispatcher, facts API, skills registration and deletion, slow path evolution triggers and telemetry status, SSE event stream, and MCP JSON-RPC 2.0 endpoints.
 - **MCP Protocol & Bridge**: Verified Model Context Protocol handshake, tools/list, tools/call sandboxing, resources/list traces, and `McpToolBridge` automatic remote tool import.

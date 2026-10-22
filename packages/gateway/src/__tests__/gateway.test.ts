@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { ServerlessEdgeAdapter, LocalDaemonAdapter } from '../index.js';
 import { DualBrainRouter, MockLLMDriver } from '@opentalon/core';
 import { LibSqlMemoryAdapter } from '@opentalon/memory';
@@ -67,7 +67,7 @@ describe('Gateway - LocalDaemonAdapter', () => {
   let daemon: LocalDaemonAdapter;
   const testPort = 3199;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     const memory = new LibSqlMemoryAdapter({ url: ':memory:' });
     await memory.initialize();
     const sandbox = new SandboxedVmRunner();
@@ -83,7 +83,7 @@ describe('Gateway - LocalDaemonAdapter', () => {
     await daemon.start();
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     await daemon.stop();
   });
 
@@ -149,6 +149,85 @@ describe('Gateway - LocalDaemonAdapter', () => {
     expect(json.topology).toBe('fan_out_fan_in');
     expect(json.subagentResults.length).toBeGreaterThan(0);
     expect(json.finalOutput).toBeDefined();
+  });
+
+  it('registers and deletes skills via POST & DELETE /api/skills', async () => {
+    const rawMarkdown = `---
+name: gateway_test_skill
+version: 1.0.0
+description: "A test skill registered via gateway"
+capabilities: {}
+---
+
+# gateway_test_skill
+Test skill implementation.
+
+## Implementation
+\`\`\`javascript
+export default async function run(args) {
+  return { value: args.x * 2 };
+}
+\`\`\`
+`;
+
+    // 1. Register Skill
+    const createRes = await fetch(`http://127.0.0.1:${testPort}/api/skills`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ markdown: rawMarkdown }),
+    });
+
+    expect(createRes.status).toBe(200);
+    const createJson = (await createRes.json()) as { success: boolean; skill: { name: string } };
+    expect(createJson.success).toBe(true);
+    expect(createJson.skill.name).toBe('gateway_test_skill');
+
+    // 2. Delete Skill
+    const deleteRes = await fetch(
+      `http://127.0.0.1:${testPort}/api/skills?name=gateway_test_skill`,
+      { method: 'DELETE' }
+    );
+    expect(deleteRes.status).toBe(200);
+    const deleteJson = (await deleteRes.json()) as { success: boolean };
+    expect(deleteJson.success).toBe(true);
+  });
+
+  it('manages slow path evolution via POST /api/evolution/run and GET /api/evolution/status', async () => {
+    // Check status
+    const statusRes = await fetch(`http://127.0.0.1:${testPort}/api/evolution/status`);
+    expect(statusRes.status).toBe(200);
+    const statusJson = (await statusRes.json()) as { isEvolving: boolean; queueLength: number };
+    expect(typeof statusJson.isEvolving).toBe('boolean');
+
+    // Run manual evolution cycle
+    const runRes = await fetch(`http://127.0.0.1:${testPort}/api/evolution/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ limit: 10, dryRun: true }),
+    });
+
+    expect(runRes.status).toBe(200);
+    const report = (await runRes.json()) as { opportunitiesFound: number };
+    expect(report.opportunitiesFound).toBeDefined();
+  });
+
+  it('exports and imports memory snapshots via /api/memory/export and /api/memory/import', async () => {
+    // Export
+    const exportRes = await fetch(`http://127.0.0.1:${testPort}/api/memory/export`);
+    expect(exportRes.status).toBe(200);
+    const snapshot = (await exportRes.json()) as { version: string; skills: unknown[]; facts: unknown[] };
+    expect(snapshot.version).toBe('1.0.0');
+
+    // Import
+    const importRes = await fetch(`http://127.0.0.1:${testPort}/api/memory/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(snapshot),
+    });
+
+    expect(importRes.status).toBe(200);
+    const importJson = (await importRes.json()) as { importedSkills: number };
+    expect(importJson.importedSkills).toBeDefined();
   });
 });
 

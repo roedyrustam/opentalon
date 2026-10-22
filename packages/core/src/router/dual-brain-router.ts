@@ -71,6 +71,10 @@ export class DualBrainRouter extends EventEmitter {
     return this.traceQueue.length;
   }
 
+  public getIsEvolving(): boolean {
+    return this.isEvolving;
+  }
+
   /**
    * Fast Path: Frugal, low-latency execution loop (<1,500 tokens/turn).
    */
@@ -341,6 +345,7 @@ export class DualBrainRouter extends EventEmitter {
     };
 
     await this.memory.saveSkill(skill);
+    this.emit('skill:registered', skill);
     return skill;
   }
 }
