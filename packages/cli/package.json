@@ -1,0 +1,27 @@
+{
+  "name": "talon",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "talon": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@opentalon/core": "workspace:*",
+    "@opentalon/gateway": "workspace:*",
+    "@opentalon/memory": "workspace:*",
+    "@opentalon/skill-engine": "workspace:*",
+    "commander": "^13.1.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,20 @@
+services:
+  opentalon:
+    build:
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile
+    container_name: opentalon-daemon
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    environment:
+      - NODE_ENV=production
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - TALON_MODEL=gemini-2.5-flash
+    volumes:
+      - opentalon_data:/app/data
+
+volumes:
+  opentalon_data:
+    driver: local
