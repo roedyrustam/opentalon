@@ -193,5 +193,53 @@ describe('LibSqlMemoryAdapter (In-Memory Engine)', () => {
     const recheck = await adapter.getFact('preferred_language');
     expect(recheck).toBeNull();
   });
+
+  it('exports and imports memory snapshots accurately', async () => {
+    // Seed a skill and a fact
+    await adapter.saveSkill({
+      id: 'skill-snap-1',
+      name: 'calculate_tax',
+      description: 'Calculates VAT tax percentage',
+      capabilities: {},
+      version: '1.0.0',
+      code: 'export default async function run(args) { return { tax: args.amount * 0.11 }; }',
+      hash: 'sha-tax',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    await adapter.saveFact({
+      id: 'fact-snap-1',
+      category: 'tax_rule',
+      key: 'vat_rate',
+      value: '11%',
+      confidence: 1.0,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    const snapshot = await adapter.exportSnapshot();
+    expect(snapshot.version).toBe('1.0.0');
+    expect(snapshot.skills.length).toBeGreaterThanOrEqual(1);
+    expect(snapshot.facts.length).toBeGreaterThanOrEqual(1);
+
+    // Create a new fresh memory database and import the snapshot
+    const targetAdapter = new LibSqlMemoryAdapter({ url: ':memory:' });
+    await targetAdapter.initialize();
+
+    const importRes = await targetAdapter.importSnapshot(snapshot);
+    expect(importRes.importedSkills).toBe(snapshot.skills.length);
+    expect(importRes.importedFacts).toBe(snapshot.facts.length);
+
+    const importedSkill = await targetAdapter.getSkill('calculate_tax');
+    expect(importedSkill).not.toBeNull();
+    expect(importedSkill?.description).toBe('Calculates VAT tax percentage');
+
+    const importedFact = await targetAdapter.getFact('vat_rate');
+    expect(importedFact).not.toBeNull();
+    expect(importedFact?.value).toBe('11%');
+
+    await targetAdapter.close();
+  });
 });
 

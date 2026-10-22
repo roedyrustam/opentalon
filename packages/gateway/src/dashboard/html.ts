@@ -314,6 +314,7 @@ export function getDashboardHtml(): string {
       </svg>
       <span>Open<span style="color: #00f2fe;">Talon</span></span>
       <span class="brand-badge">Dual-Brain Engine</span>
+      <a href="/showcase" target="_blank" class="brand-badge" style="text-decoration: none; margin-left: 0.5rem; background: linear-gradient(135deg, #00f2fe, #d946ef);" title="Open Standalone 3D Holographic Core">3D Core ↗</a>
     </div>
     <nav>
       <button class="tab-btn active" onclick="switchTab('overview')">Overview</button>
@@ -620,8 +621,8 @@ export function getDashboardHtml(): string {
         <div class="card">
           <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
             <span>Active Knowledge Items</span>
-            <div style="display: flex; gap: 0.5rem; align-items: center;">
-              <input type="text" id="fact-search-input" class="chat-input" placeholder="Search facts..." style="width: 180px; padding: 0.4rem 0.75rem; font-size: 0.825rem;" onkeydown="if(event.key==='Enter') searchFacts()" />
+            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+              <input type="text" id="fact-search-input" class="chat-input" placeholder="Search facts..." style="width: 150px; padding: 0.4rem 0.75rem; font-size: 0.825rem;" onkeydown="if(event.key==='Enter') searchFacts()" />
               <select id="fact-filter-category" class="chat-input" style="padding: 0.4rem 0.75rem; font-size: 0.825rem;" onchange="loadFacts()">
                 <option value="">All Categories</option>
                 <option value="user_preference">User Preferences</option>
@@ -629,7 +630,9 @@ export function getDashboardHtml(): string {
                 <option value="domain_knowledge">Domain Knowledge</option>
                 <option value="developer_habit">Developer Habits</option>
               </select>
-              <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.825rem;" onclick="loadFacts()">Refresh</button>
+              <button class="btn" style="padding: 0.4rem 0.75rem; font-size: 0.825rem;" onclick="loadFacts()">Refresh</button>
+              <button class="btn" style="background: #334155; padding: 0.4rem 0.75rem; font-size: 0.825rem;" onclick="exportMemorySnapshot()" title="Export JSON memory snapshot">Export</button>
+              <button class="btn" style="background: #334155; padding: 0.4rem 0.75rem; font-size: 0.825rem;" onclick="promptImportMemorySnapshot()" title="Import JSON memory snapshot">Import</button>
             </div>
           </div>
 
@@ -789,6 +792,8 @@ export function getDashboardHtml(): string {
       }
     }
 
+    let conversationHistory = [];
+
     async function sendMessage() {
       const input = document.getElementById('chat-input');
       const text = input.value.trim();
@@ -804,11 +809,17 @@ export function getDashboardHtml(): string {
       container.appendChild(assistantMsg);
       container.scrollTop = container.scrollHeight;
 
+      conversationHistory.push({ role: 'user', content: text });
+
       try {
         const response = await fetch('/v1/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ input: text, sessionId: 'dashboard_sess' })
+          body: JSON.stringify({
+            input: text,
+            sessionId: 'dashboard_sess',
+            history: conversationHistory.slice(-10),
+          })
         });
 
         const reader = response.body.getReader();
@@ -839,6 +850,9 @@ export function getDashboardHtml(): string {
               } catch (e) {}
             }
           }
+        }
+        if (accumulatedText) {
+          conversationHistory.push({ role: 'assistant', content: accumulatedText });
         }
       } catch (err) {
         assistantMsg.innerText = 'Error: ' + err.message;
@@ -1165,6 +1179,42 @@ export function getDashboardHtml(): string {
         }
       } catch (err) {
         alert('Delete failed: ' + err.message);
+      }
+    }
+
+    async function exportMemorySnapshot() {
+      try {
+        const res = await fetch('/api/memory/export?includeTraces=true');
+        const data = await res.json();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'opentalon-snapshot-' + Date.now() + '.json';
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert('Failed to export snapshot: ' + e.message);
+      }
+    }
+
+    async function promptImportMemorySnapshot() {
+      const jsonStr = prompt('Paste JSON memory snapshot to restore:');
+      if (!jsonStr) return;
+      try {
+        const snapshot = JSON.parse(jsonStr);
+        const res = await fetch('/api/memory/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(snapshot),
+        });
+        const result = await res.json();
+        alert('Memory snapshot restored!\\nSkills: ' + result.importedSkills + '\\nFacts: ' + result.importedFacts + '\\nTraces: ' + result.importedTraces);
+        loadFacts();
+        loadSkills();
+        loadStats();
+      } catch (e) {
+        alert('Import error: ' + e.message);
       }
     }
 

@@ -7,6 +7,8 @@ import {
   type ProceduralSkill,
   type HybridSearchResult,
   type SkillCapabilities,
+  type MemorySnapshot,
+  type ImportSnapshotResult,
 } from './types.js';
 import { cosineSimilarity, reciprocalRankFusion, type RankedItem } from './rrf.js';
 
@@ -580,6 +582,88 @@ export class LibSqlMemoryAdapter implements IMemoryPort {
       embedding: row.embedding ? JSON.parse(String(row.embedding)) : undefined,
       createdAt: Number(row.created_at),
       updatedAt: Number(row.updated_at),
+    };
+  }
+
+  /**
+   * Export complete memory state (skills, facts, and optional traces) as a portable snapshot.
+   */
+  public async exportSnapshot(options?: { includeTraces?: boolean }): Promise<MemorySnapshot> {
+    await this.initialize();
+
+    const skills = await this.listSkills();
+    const facts = await this.listFacts({ limit: 10000 });
+    let traces: EpisodicTrace[] | undefined;
+
+    if (options?.includeTraces) {
+      traces = await this.getRecentTraces(1000);
+    }
+
+    return {
+      version: '1.0.0',
+      exportedAt: Date.now(),
+      skills,
+      facts,
+      traces,
+    };
+  }
+
+  /**
+   * Import memory state from a portable snapshot into local libSQL database.
+   */
+  public async importSnapshot(
+    snapshot: MemorySnapshot,
+    options?: { overwrite?: boolean }
+  ): Promise<ImportSnapshotResult> {
+    await this.initialize();
+
+    let importedSkills = 0;
+    let importedFacts = 0;
+    let importedTraces = 0;
+
+    // Import Skills
+    if (snapshot.skills && Array.isArray(snapshot.skills)) {
+      for (const skill of snapshot.skills) {
+        try {
+          const existing = await this.getSkill(skill.name);
+          if (!existing || options?.overwrite) {
+            await this.saveSkill(skill);
+            importedSkills++;
+          }
+        } catch {
+          // Continue on individual skill import conflict
+        }
+      }
+    }
+
+    // Import Facts
+    if (snapshot.facts && Array.isArray(snapshot.facts)) {
+      for (const fact of snapshot.facts) {
+        try {
+          await this.saveFact(fact);
+          importedFacts++;
+        } catch {
+          // Continue on individual fact conflict
+        }
+      }
+    }
+
+    // Import Traces
+    if (snapshot.traces && Array.isArray(snapshot.traces)) {
+      for (const trace of snapshot.traces) {
+        try {
+          await this.saveTrace(trace);
+          importedTraces++;
+        } catch {
+          // Continue on individual trace conflict
+        }
+      }
+    }
+
+    return {
+      importedSkills,
+      importedFacts,
+      importedTraces,
     };
   }
 }

@@ -112,4 +112,22 @@ export interface IMemoryPort {
     topK?: number
   ): Promise<HybridSearchResult<ProceduralSkill>[]>;
   deleteSkill(id: string): Promise<boolean>;
+
+  // Snapshot Migration & Backup
+  exportSnapshot(options?: { includeTraces?: boolean }): Promise<MemorySnapshot>;
+  importSnapshot(snapshot: MemorySnapshot, options?: { overwrite?: boolean }): Promise<ImportSnapshotResult>;
+}
+
+export interface MemorySnapshot {
+  version: string;
+  exportedAt: number;
+  skills: ProceduralSkill[];
+  facts: SemanticFact[];
+  traces?: EpisodicTrace[];
+}
+
+export interface ImportSnapshotResult {
+  importedSkills: number;
+  importedFacts: number;
+  importedTraces: number;
 }

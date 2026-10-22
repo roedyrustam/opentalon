@@ -282,6 +282,20 @@ Deletes a semantic fact from long-term memory.
 talon memory remove fact_1719283921_a83f9
 ```
 
+#### 21. `talon memory export [filePath]`
+Exports the entire knowledge repository (procedural skills, semantic facts, and optional episodic traces) to a portable JSON snapshot.
+
+```bash
+talon memory export backup-snapshot.json --include-traces
+```
+
+#### 22. `talon memory import <filePath>`
+Restores memory state, skills, and facts from a JSON snapshot into the active database.
+
+```bash
+talon memory import backup-snapshot.json --overwrite
+```
+
 ---
 
 ## Dual-Brain Protocol (Fast Path vs Slow Path)
@@ -412,11 +426,14 @@ When running `talon serve` or `LocalDaemonAdapter`, the following endpoints are 
 | `GET` | `/api/stats` | Telemetry counters: skillsCount, tracesCount, factsCount, avgLatencyMs |
 | `GET` | `/api/skills` | List all registered procedural skills |
 | `POST` | `/api/skills/test` | Execute a skill directly in the Zero-Trust Sandbox (`{ name, args }`) |
+| `GET` | `/showcase` / `/3d` | Standalone 60FPS 3D Dynamic Holographic Core showcase |
 | `GET` | `/api/traces` | Retrieve the last 50 episodic execution traces |
 | `GET` | `/api/facts` | List semantic facts, optional filter `?category=<cat>` |
 | `POST` | `/api/facts` | Store a new semantic fact (`{ category, key, value, confidence }`) |
 | `DELETE` | `/api/facts?id=<id>` | Delete a semantic fact from memory |
 | `GET` | `/api/facts/search?q=<query>` | Full-text FTS5 keyword search across semantic memory |
+| `GET` | `/api/memory/export` | Download full memory snapshot as JSON (`?includeTraces=true`) |
+| `POST` | `/api/memory/import` | Import memory snapshot JSON into database (`{ overwrite: true }`) |
 | `GET` | `/api/mcp/tools` | List MCP tools exposed by the gateway |
 | `POST` | `/api/mcp/rpc` | Model Context Protocol JSON-RPC 2.0 dispatch endpoint |
 | `POST` | `/api/mcp/import` | Auto-discover & synthesize skills from external HTTP MCP server |
@@ -471,8 +488,8 @@ OpenTalon includes a comprehensive test suite across all monorepo modules using 
 pnpm test
 ```
 
-### Test Coverage Highlights (64 Tests Across 11 Suites)
-- **`@opentalon/memory`**: Verified FTS5 full-text indexing, vector cosine distance, RRF score ordering, trace persistence, and semantic facts knowledge store (save, list, search, delete).
+### Test Coverage Highlights (65 Tests Across 11 Suites)
+- **`@opentalon/memory`**: Verified FTS5 full-text indexing, vector cosine distance, RRF score ordering, trace persistence, semantic facts knowledge store, and portable memory snapshot export & import.
 - **`@opentalon/core`**: Verified Fast Path token budget truncation (<1,500 tokens), semantic facts auto-retrieval and system prefix injection, adaptive tool error self-correction, LLM tool-calling loops, mock driver fallback, Circuit Breaker self-healing, FinOps hourly throttle, and Swarm multi-agent orchestration (Fan-Out/Fan-In, Pipeline Saga, Critic-Validator Loop).
 - **`@opentalon/skill-engine`**: Verified `SKILL.md` parsing, zero-trust sandbox execution, capability violation rejection, timeout interception, semantic versioning, and full verification across **10 production skills** in the gallery.
 - **`@opentalon/gateway`**: Verified local daemon HTTP routing (`/health`, `/v1/chat`, `/v1/stream`), error handling, serverless edge payloads, Web Cockpit Dashboard, Swarm dispatcher, facts API, and MCP JSON-RPC 2.0 endpoints.

@@ -1,4 +1,6 @@
 import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   DualBrainRouter,
   McpServer,
@@ -62,6 +64,21 @@ export class LocalDaemonAdapter {
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end(getDashboardHtml());
           return;
+        }
+
+        // 2b. 3D Logo & Holographic Core Showcase
+        if (req.method === 'GET' && (url.pathname === '/showcase' || url.pathname === '/3d')) {
+          const showcaseCandidates = [
+            path.resolve(process.cwd(), 'assets', '3d-logo-showcase.html'),
+            path.resolve(process.cwd(), '..', '..', 'assets', '3d-logo-showcase.html'),
+          ];
+          const foundPath = showcaseCandidates.find((p) => fs.existsSync(p));
+          if (foundPath) {
+            const html = fs.readFileSync(foundPath, 'utf-8');
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(html);
+            return;
+          }
         }
 
         // 3. Telemetry Stats Endpoint
@@ -199,6 +216,43 @@ export class LocalDaemonAdapter {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: String(err) }));
           }
+          return;
+        }
+
+        // 5f. Export Memory Snapshot API
+        if (req.method === 'GET' && url.pathname === '/api/memory/export') {
+          try {
+            const includeTraces = url.searchParams.get('includeTraces') === 'true';
+            const snapshot = await this.router.getMemory().exportSnapshot({ includeTraces });
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Content-Disposition': `attachment; filename="opentalon-memory-${Date.now()}.json"`,
+            });
+            res.end(JSON.stringify(snapshot, null, 2));
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+          return;
+        }
+
+        // 5g. Import Memory Snapshot API
+        if (req.method === 'POST' && url.pathname === '/api/memory/import') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const snapshot = JSON.parse(body);
+              const result = await this.router.getMemory().importSnapshot(snapshot, { overwrite: true });
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify(result));
+            } catch (err: unknown) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: String(err) }));
+            }
+          });
           return;
         }
 

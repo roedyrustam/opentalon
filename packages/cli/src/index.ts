@@ -748,4 +748,59 @@ memoryCommand
     }
   });
 
+memoryCommand
+  .command('export [filePath]')
+  .description('Export complete memory state (skills, facts, traces) to a JSON snapshot file')
+  .option('--include-traces', 'Include episodic execution traces in the export', false)
+  .action(async (filePath?: string, options?: { includeTraces: boolean }) => {
+    const { memory } = getComponents();
+    await memory.initialize();
+
+    const targetPath = filePath
+      ? path.resolve(filePath)
+      : path.resolve(process.cwd(), `opentalon-memory-snapshot-${Date.now()}.json`);
+
+    console.log(`\n📦 Exporting memory snapshot...`);
+    const snapshot = await memory.exportSnapshot({ includeTraces: options?.includeTraces });
+    await memory.close();
+
+    fs.writeFileSync(targetPath, JSON.stringify(snapshot, null, 2), 'utf-8');
+    console.log(`✅ Snapshot saved to: ${targetPath}`);
+    console.log(`   • Skills: ${snapshot.skills.length}`);
+    console.log(`   • Facts:  ${snapshot.facts.length}`);
+    console.log(`   • Traces: ${snapshot.traces?.length ?? 0}\n`);
+  });
+
+memoryCommand
+  .command('import <filePath>')
+  .description('Import memory snapshot from a JSON file into active libSQL database')
+  .option('--overwrite', 'Overwrite existing skills with same name', false)
+  .action(async (filePath: string, options: { overwrite: boolean }) => {
+    const fullPath = path.resolve(filePath);
+    if (!fs.existsSync(fullPath)) {
+      console.error(`❌ Snapshot file not found: ${fullPath}`);
+      process.exit(1);
+    }
+
+    let snapshot;
+    try {
+      snapshot = JSON.parse(fs.readFileSync(fullPath, 'utf-8'));
+    } catch {
+      console.error(`❌ Invalid JSON in snapshot file: ${fullPath}`);
+      process.exit(1);
+    }
+
+    const { memory } = getComponents();
+    await memory.initialize();
+
+    console.log(`\n📥 Importing memory snapshot from: ${fullPath}...`);
+    const res = await memory.importSnapshot(snapshot, { overwrite: options.overwrite });
+    await memory.close();
+
+    console.log(`✅ Successfully restored:`);
+    console.log(`   • Skills: ${res.importedSkills}`);
+    console.log(`   • Facts:  ${res.importedFacts}`);
+    console.log(`   • Traces: ${res.importedTraces}\n`);
+  });
+
 program.parse(process.argv);
