@@ -9,6 +9,8 @@ import {
   MockLLMDriver,
   EvolutionEngine,
   McpServer,
+  McpClientAdapter,
+  McpToolBridge,
   SwarmDirector,
   type ChatMessage,
 } from '@opentalon/core';
@@ -392,7 +394,115 @@ swarmCommand
     console.log(`✅ Approved in ${result.criticIterations} critique cycle(s) (Total Latency: ${result.totalLatencyMs}ms)\n`);
   });
 
-// 8. `talon skills`
+// 8. `talon mcp`
+const mcpCommand = program
+  .command('mcp')
+  .description('Model Context Protocol (MCP) server & client integration');
+
+mcpCommand
+  .command('serve')
+  .description('Start OpenTalon MCP Server on Stdio (connect with Claude Desktop, Cursor, Antigravity)')
+  .action(async () => {
+    const { mcpServer, memory } = getComponents();
+    await memory.initialize();
+    console.error('🦅 [OpenTalon MCP Server] Ready on Stdio. Listening for JSON-RPC 2.0 frames...');
+    mcpServer.startStdio();
+  });
+
+mcpCommand
+  .command('list')
+  .description('List all procedural tools exposed via MCP server')
+  .action(async () => {
+    const { mcpServer, memory } = getComponents();
+    await memory.initialize();
+    const res = await mcpServer.handleMessage({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/list',
+    });
+    await memory.close();
+
+    const tools = (res.result as { tools: Array<{ name: string; description: string }> })?.tools || [];
+    console.log(`\n🔌 OpenTalon MCP Tools (${tools.length} available):`);
+    if (tools.length === 0) {
+      console.log('   No tools registered. Register skills via "talon skills add <file.md>".');
+      return;
+    }
+    for (const tool of tools) {
+      console.log(`  • ${tool.name}`);
+      console.log(`    ${tool.description}`);
+    }
+    console.log('');
+  });
+
+mcpCommand
+  .command('call <toolName> [argsJson]')
+  .description('Invoke an MCP tool call directly')
+  .action(async (toolName: string, argsJson?: string) => {
+    const { mcpServer, memory } = getComponents();
+    await memory.initialize();
+
+    let args = {};
+    if (argsJson) {
+      try {
+        args = JSON.parse(argsJson);
+      } catch {
+        console.error('❌ Invalid JSON arguments string.');
+        await memory.close();
+        process.exit(1);
+      }
+    }
+
+    console.log(`\n🔌 Calling MCP Tool: ${toolName}...`);
+    const res = await mcpServer.handleMessage({
+      jsonrpc: '2.0',
+      id: Date.now(),
+      method: 'tools/call',
+      params: { name: toolName, arguments: args },
+    });
+    await memory.close();
+
+    console.log('\n--- MCP Response ---');
+    console.log(JSON.stringify(res, null, 2));
+    console.log('--------------------\n');
+  });
+
+mcpCommand
+  .command('import <endpointUrl>')
+  .description('Import tools from an external MCP server into OpenTalon procedural memory')
+  .option('-p, --prefix <prefix>', 'Skill name prefix', 'mcp')
+  .option('--allowed-hosts <hosts>', 'Comma-separated list of allowed network hosts')
+  .action(async (endpointUrl: string, options: { prefix: string; allowedHosts?: string }) => {
+    const { memory } = getComponents();
+    await memory.initialize();
+
+    console.log(`\n🔌 Connecting to remote MCP server at: ${endpointUrl}...`);
+    const client = new McpClientAdapter({
+      name: 'cli-mcp-importer',
+      transport: 'http',
+      url: endpointUrl,
+    });
+
+    try {
+      const allowedHosts = options.allowedHosts ? options.allowedHosts.split(',').map((s) => s.trim()) : [];
+      const report = await McpToolBridge.importMcpTools(client, memory, {
+        prefix: options.prefix,
+        allowedHosts,
+      });
+
+      console.log(`✅ Successfully imported ${report.importedSkills.length} tools into procedural memory:`);
+      for (const item of report.importedSkills) {
+        console.log(`  • ${item.name} (remote tool: ${item.remoteToolName})`);
+      }
+      console.log('\n💡 These tools are now executable via "talon skills run <skillName>" and indexed for Fast Path routing!\n');
+    } catch (err: unknown) {
+      console.error('❌ MCP Import failed:', err instanceof Error ? err.message : String(err));
+    } finally {
+      await memory.close();
+    }
+  });
+
+// 9. `talon skills`
 const skillsCommand = program.command('skills').description('Manage procedural skills');
 
 skillsCommand
@@ -440,6 +550,115 @@ skillsCommand
       console.error('❌ Failed to register skill:', err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
+  });
+
+skillsCommand
+  .command('run <skillName> [argsJson]')
+  .description('Execute a registered procedural skill directly in the Zero-Trust Sandbox')
+  .action(async (skillName: string, argsJson?: string) => {
+    const { memory, sandbox } = getComponents();
+    await memory.initialize();
+
+    const skill = await memory.getSkill(skillName);
+    if (!skill) {
+      console.error(`❌ Skill "${skillName}" not found in memory database.`);
+      await memory.close();
+      process.exit(1);
+    }
+
+    let parsedArgs: Record<string, unknown> = {};
+    if (argsJson) {
+      try {
+        parsedArgs = JSON.parse(argsJson);
+      } catch {
+        console.error('❌ Invalid JSON arguments string provided.');
+        await memory.close();
+        process.exit(1);
+      }
+    }
+
+    console.log(`\n🧪 Executing skill [${skill.name} v${skill.version}] in Zero-Trust Sandbox...`);
+    console.log(`   Arguments: ${JSON.stringify(parsedArgs)}`);
+    console.log(`   Capabilities: ${JSON.stringify(skill.capabilities)}`);
+
+    const start = Date.now();
+    const result = await sandbox.execute({
+      code: skill.code,
+      args: parsedArgs,
+      capabilities: skill.capabilities,
+      timeoutMs: 5000,
+    });
+    const elapsed = Date.now() - start;
+
+    await memory.close();
+
+    console.log(`\n--- Execution Result (${elapsed}ms) ---`);
+    console.log(`Status: ${result.success ? '✅ SUCCESS' : '❌ FAILED'}`);
+    if (result.data !== undefined) {
+      console.log('Return Data:');
+      console.log(JSON.stringify(result.data, null, 2));
+    }
+    if (result.error) {
+      console.log(`Error: ${result.error}`);
+    }
+    if (result.logs && result.logs.length > 0) {
+      console.log('\nSandbox Logs:');
+      for (const log of result.logs) {
+        console.log(`  > ${log}`);
+      }
+    }
+    console.log('--------------------------------------\n');
+  });
+
+skillsCommand
+  .command('info <skillName>')
+  .description('Inspect detailed metadata, capabilities, and code of a procedural skill')
+  .action(async (skillName: string) => {
+    const { memory } = getComponents();
+    await memory.initialize();
+
+    const skill = await memory.getSkill(skillName);
+    await memory.close();
+
+    if (!skill) {
+      console.error(`❌ Skill "${skillName}" not found.`);
+      process.exit(1);
+    }
+
+    console.log(`\n========================================`);
+    console.log(`📜 Skill: ${skill.name} (v${skill.version})`);
+    console.log(`========================================`);
+    console.log(`ID:           ${skill.id}`);
+    console.log(`Description:  ${skill.description}`);
+    console.log(`SHA-256 Hash: ${skill.hash}`);
+    console.log(`Capabilities: ${JSON.stringify(skill.capabilities, null, 2)}`);
+    console.log(`Created:      ${new Date(skill.createdAt).toISOString()}`);
+    console.log(`\n--- Executable Source ---`);
+    console.log(skill.code);
+    if (skill.testCases) {
+      console.log(`\n--- Verified Test Cases ---`);
+      console.log(skill.testCases);
+    }
+    console.log(`========================================\n`);
+  });
+
+skillsCommand
+  .command('remove <skillName>')
+  .description('Remove a procedural skill from the memory database')
+  .action(async (skillName: string) => {
+    const { memory } = getComponents();
+    await memory.initialize();
+
+    const skill = await memory.getSkill(skillName);
+    if (!skill) {
+      console.error(`❌ Skill "${skillName}" not found.`);
+      await memory.close();
+      process.exit(1);
+    }
+
+    await memory.deleteSkill(skill.id);
+    await memory.close();
+    console.log(`🗑️ Successfully removed skill: ${skill.name} (${skill.id})`);
   });
 
 program.parse(process.argv);

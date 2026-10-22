@@ -9,5 +9,6 @@ export * from './evolution/evolution-engine.js';
 export * from './mcp/types.js';
 export * from './mcp/mcp-server.js';
 export * from './mcp/mcp-client.js';
+export * from './mcp/mcp-bridge.js';
 export * from './swarm/types.js';
 export * from './swarm/swarm-director.js';

@@ -105,4 +105,50 @@ describe('Gateway - LocalDaemonAdapter', () => {
     const json = (await res.json()) as { output: string };
     expect(json.output).toBe('Daemon local response');
   });
+
+  it('exposes MCP tools via GET /api/mcp/tools', async () => {
+    const res = await fetch(`http://127.0.0.1:${testPort}/api/mcp/tools`);
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { tools: Array<{ name: string }> };
+    expect(Array.isArray(json.tools)).toBe(true);
+  });
+
+  it('handles MCP JSON-RPC requests via POST /api/mcp/rpc', async () => {
+    const res = await fetch(`http://127.0.0.1:${testPort}/api/mcp/rpc`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 42,
+        method: 'initialize',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { id: number; result: { serverInfo: { name: string } } };
+    expect(json.id).toBe(42);
+    expect(json.result.serverInfo.name).toBe('opentalon-mcp-server');
+  });
+
+  it('executes Swarm topologies via POST /api/swarm/execute', async () => {
+    const res = await fetch(`http://127.0.0.1:${testPort}/api/swarm/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topology: 'fan_out_fan_in',
+        task: 'Design secure payment gateway architecture',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as {
+      topology: string;
+      finalOutput: string;
+      subagentResults: Array<{ role: string }>;
+    };
+    expect(json.topology).toBe('fan_out_fan_in');
+    expect(json.subagentResults.length).toBeGreaterThan(0);
+    expect(json.finalOutput).toBeDefined();
+  });
 });
+

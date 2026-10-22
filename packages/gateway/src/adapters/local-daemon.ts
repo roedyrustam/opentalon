@@ -1,5 +1,11 @@
 import http from 'node:http';
-import { DualBrainRouter } from '@opentalon/core';
+import {
+  DualBrainRouter,
+  McpServer,
+  McpClientAdapter,
+  McpToolBridge,
+  SwarmDirector,
+} from '@opentalon/core';
 import { type GatewayRequestPayload, type GatewayResponsePayload } from '../types.js';
 import { getDashboardHtml } from '../dashboard/html.js';
 import { SseStreamAdapter } from './sse-stream.js';
@@ -16,12 +22,16 @@ export class LocalDaemonAdapter {
   private port: number;
   private host: string;
   private sseAdapter: SseStreamAdapter;
+  private mcpServer: McpServer;
+  private swarmDirector: SwarmDirector;
 
   constructor(router: DualBrainRouter, options: LocalDaemonOptions = {}) {
     this.router = router;
     this.port = options.port ?? 3100;
     this.host = options.host ?? '127.0.0.1';
     this.sseAdapter = new SseStreamAdapter(router);
+    this.mcpServer = new McpServer(router.getMemory(), router.getSandbox());
+    this.swarmDirector = new SwarmDirector(router.getLLM());
   }
 
   public start(): Promise<number> {
@@ -215,6 +225,125 @@ export class LocalDaemonAdapter {
               const msg = err instanceof Error ? err.message : String(err);
               res.writeHead(500, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ error: msg }));
+            }
+          });
+          return;
+        }
+
+        // 9. MCP Tools list endpoint
+        if (req.method === 'GET' && url.pathname === '/api/mcp/tools') {
+          try {
+            const resRpc = await this.mcpServer.handleMessage({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'tools/list',
+            });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(resRpc.result));
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+          return;
+        }
+
+        // 10. MCP JSON-RPC Dispatch endpoint
+        if (req.method === 'POST' && url.pathname === '/api/mcp/rpc') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const rpcReq = JSON.parse(body);
+              const rpcRes = await this.mcpServer.handleMessage(rpcReq);
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify(rpcRes));
+            } catch (err: unknown) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: String(err) }));
+            }
+          });
+          return;
+        }
+
+        // 11. MCP Tool Import endpoint
+        if (req.method === 'POST' && url.pathname === '/api/mcp/import') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const payload = JSON.parse(body) as { url: string; prefix?: string; allowedHosts?: string[] };
+              const client = new McpClientAdapter({
+                name: 'remote-importer',
+                transport: 'http',
+                url: payload.url,
+              });
+              const report = await McpToolBridge.importMcpTools(client, this.router.getMemory(), {
+                prefix: payload.prefix ?? 'mcp',
+                allowedHosts: payload.allowedHosts ?? [],
+              });
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify(report));
+            } catch (err: unknown) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: String(err) }));
+            }
+          });
+          return;
+        }
+
+        // 12. Swarm Multi-Agent Execution endpoint
+        if (req.method === 'POST' && url.pathname === '/api/swarm/execute') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const payload = JSON.parse(body) as {
+                topology: 'fan_out_fan_in' | 'pipeline_saga' | 'critic_validator_loop';
+                task: string;
+                agents?: Array<{ id: string; role: string; systemInstruction: string }>;
+                criticConfig?: { maxRetries?: number };
+              };
+
+              let agents = payload.agents;
+              if (!agents || agents.length === 0) {
+                if (payload.topology === 'fan_out_fan_in') {
+                  agents = [
+                    { id: 'architect', role: 'System Architect', systemInstruction: 'You are the System Architect. Provide architectural foundations.' },
+                    { id: 'security', role: 'Security Sentinel', systemInstruction: 'You are the Security Sentinel. Audit threat models and validation gates.' },
+                    { id: 'craftsman', role: 'Fullstack Craftsman', systemInstruction: 'You are the Fullstack Craftsman. Provide concrete implementation.' },
+                  ];
+                } else if (payload.topology === 'pipeline_saga') {
+                  agents = [
+                    { id: 'stage-1', role: 'Discovery & Requirements', systemInstruction: 'Extract PRD and domain entities.' },
+                    { id: 'stage-2', role: 'API & Contract Design', systemInstruction: 'Design OpenAPI and type contracts.' },
+                    { id: 'stage-3', role: 'Implementation & Verification', systemInstruction: 'Write production code.' },
+                  ];
+                } else {
+                  agents = [
+                    { id: 'implementer', role: 'Implementer Agent', systemInstruction: 'You are the Implementer Agent. Write complete code.' },
+                    { id: 'critic', role: 'Strict Quality Critic', systemInstruction: 'You are the Strict Quality Critic. Reject any flaw.' },
+                  ];
+                }
+              }
+
+              const result = await this.swarmDirector.executeSwarm({
+                topology: payload.topology,
+                task: payload.task,
+                agents,
+                criticConfig: payload.criticConfig,
+              });
+
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify(result));
+            } catch (err: unknown) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: String(err) }));
             }
           });
           return;

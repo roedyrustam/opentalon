@@ -184,6 +184,27 @@ Parses a `SKILL.md` file, verifies its capabilities, executes its test cases in 
 talon skills add examples/skills/currency-converter.md
 ```
 
+#### 7. `talon skills run <skillName> [argsJson]`
+Executes a registered procedural skill directly in the Zero-Trust Sandbox without LLM overhead, showing execution time, logs, and return data.
+
+```bash
+talon skills run doku_payment_checkout '{"action":"generate_checkout","amount":150000}'
+```
+
+#### 8. `talon skills info <skillName>`
+Inspects full metadata, capabilities whitelist, code implementation, test cases, and SHA-256 hash of a procedural skill.
+
+```bash
+talon skills info doku_payment_checkout
+```
+
+#### 9. `talon skills remove <skillName>`
+Deletes a skill from both the procedural memory repository and the full-text search (FTS5) index.
+
+```bash
+talon skills remove doku_payment_checkout
+```
+
 ---
 
 ## Dual-Brain Protocol (Fast Path vs Slow Path)

@@ -1,12 +1,10 @@
-# Session Checkpoint: OpenTalon Slow Path Closed-Loop
+# Session Checkpoint: OpenTalon Platform Evolution
 
-- **Status**: Implemented & Verified (100% Tests Passing)
+- **Status**: Implemented, Extended & Fully Verified (100% Tests Passing)
 - **Active Document**: `c:\talon\DOCUMENTATION.md`
-- **Milestone Completed**: Slow Path Closed-Loop Autonomous Evolution & Resilience
-- **Accomplishments**:
-  1. `EvolutionEngine`: Circuit Breaker (max retries threshold), FinOps hourly rate throttle, Dry-run mode, Self-healing retry feedback loop.
-  2. `DualBrainRouter`: In-memory debounced queue (5s buffer / max 5 batch) and auto-flush mechanism.
-  3. `HeuristicsExtractor`: Deterministic opportunity IDs for stable cross-cycle tracking.
-  4. CLI: Enhanced `talon evolve --dry-run --json` and `talon serve --auto-evolve`.
-  5. Vitest: 54/54 tests passing across all 11 test suites.
-  6. Documentation: `DOCUMENTATION.md` & `DESIGN.md` fully synchronized.
+- **Milestones Completed**:
+  1. **Slow Path Closed-Loop**: Circuit Breaker, FinOps throttle, debounced queue, auto-flush, deterministic opportunity IDs.
+  2. **Visual 3D Identity**: Master 3D visual render (`assets/opentalon-3d-master.jpg`), animated 3D SVG brandmark & icon (`assets/logo.svg`, `assets/icon.svg`), standalone 60FPS 3D WebGL/Canvas holographic showcase (`assets/3d-logo-showcase.html`), and embedded live 3D core in dashboard cockpit.
+  3. **Developer CLI Expansion**: Added `talon skills run`, `talon skills info`, and `talon skills remove` to directly test and audit skills inside the Zero-Trust Sandbox.
+  4. **FinTech & RAG Production Skills**: Added `doku-payment-checkout.md` (DOKU Checkout, SNAP BI, VA & QRIS) and `rag-document-retriever.md` (in-memory semantic chunking & cosine ranking).
+  5. **Test Suite**: 56/56 tests passing across all 11 test suites with 0 regressions.

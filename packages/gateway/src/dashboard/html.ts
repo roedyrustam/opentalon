@@ -319,6 +319,8 @@ export function getDashboardHtml(): string {
       <button class="tab-btn active" onclick="switchTab('overview')">Overview</button>
       <button class="tab-btn" onclick="switchTab('traces')">Episodic Traces</button>
       <button class="tab-btn" onclick="switchTab('skills')">Procedural Skills</button>
+      <button class="tab-btn" onclick="switchTab('swarm')">Swarm Topologies</button>
+      <button class="tab-btn" onclick="switchTab('mcp')">MCP Hub</button>
       <button class="tab-btn" onclick="switchTab('chat')">Live Playground</button>
     </nav>
   </header>
@@ -451,7 +453,128 @@ export function getDashboardHtml(): string {
       </div>
     </section>
 
-    <!-- TAB 4: LIVE PLAYGROUND (SSE STREAMING) -->
+    <!-- TAB 4: SWARM TOPOLOGIES -->
+    <section id="swarm" class="tab-content">
+      <div class="card" style="margin-bottom: 1.5rem;">
+        <div class="card-title">Autonomous Swarm Orchestration Engine</div>
+        <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1.25rem;">
+          Dispatch multi-agent concurrent swarms across 2026 cognitive topologies: Fan-Out/Fan-In parallel research, Pipeline Saga sequential dependent execution, or Critic-Validator Loop zero-tolerance quality gates.
+        </p>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+          <div class="stat-card" id="swarm-top-fanout" style="cursor: pointer; border: 2px solid var(--primary);" onclick="selectSwarmTopology('fan_out_fan_in')">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+              <strong style="color: #60a5fa;">Fan-Out / Fan-In</strong>
+              <span class="badge badge-blue">Parallel</span>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">
+              Concurrent subagent execution (Architect, Security, Craftsman) with unified consensus synthesis.
+            </div>
+          </div>
+
+          <div class="stat-card" id="swarm-top-saga" style="cursor: pointer; border: 1px solid var(--card-border);" onclick="selectSwarmTopology('pipeline_saga')">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+              <strong style="color: #a78bfa;">Pipeline Saga</strong>
+              <span class="badge badge-purple">Sequential</span>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">
+              Multi-stage pipeline passing intermediate state: Discovery &rarr; Contracts &rarr; Implementation.
+            </div>
+          </div>
+
+          <div class="stat-card" id="swarm-top-critic" style="cursor: pointer; border: 1px solid var(--card-border);" onclick="selectSwarmTopology('critic_validator_loop')">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+              <strong style="color: #34d399;">Critic-Validator Loop</strong>
+              <span class="badge badge-success">Quality Gate</span>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">
+              Self-healing adversarial loop between Implementer and Strict Critic until 100% verified.
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+          <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem;">Mission / Task Objective:</label>
+          <textarea id="swarm-task-input" style="width: 100%; height: 90px; background: #0d131f; border: 1px solid var(--card-border); color: #fff; padding: 0.75rem; border-radius: 8px; font-family: var(--font-sans); font-size: 0.9rem;" placeholder="e.g. Design and synthesize a DOKU SNAP BI payment webhook processor with HMAC validation and atomic idempotency..."></textarea>
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; gap: 1rem; align-items: center;">
+            <span style="font-size: 0.8rem; color: var(--text-muted);">Selected Topology: <strong id="swarm-selected-label" style="color: #60a5fa;">fan_out_fan_in</strong></span>
+          </div>
+          <button class="btn" id="swarm-run-btn" onclick="runSwarmTask()">Launch Swarm Mission</button>
+        </div>
+      </div>
+
+      <div id="swarm-results-card" class="card" style="display: none;">
+        <div class="card-title">
+          <span>Swarm Execution Telemetry</span>
+          <span id="swarm-telemetry-badge" class="badge badge-blue">Running...</span>
+        </div>
+        <div id="swarm-subagents-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;"></div>
+        <div style="border-top: 1px solid var(--card-border); padding-top: 1rem;">
+          <div style="font-weight: 700; margin-bottom: 0.5rem; color: #38bdf8;">Final Unified Output / Approved Solution:</div>
+          <pre id="swarm-final-output" style="max-height: 400px; white-space: pre-wrap;"></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: MCP HUB -->
+    <section id="mcp" class="tab-content">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem;">
+        <div class="card">
+          <div class="card-title">OpenTalon MCP Server Status</div>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+            OpenTalon natively implements Model Context Protocol (MCP v1.x, specification 2024-11-05). All procedural skills and episodic traces are accessible as tools and resources.
+          </p>
+          <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.85rem; font-family: var(--font-mono);">
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #1f293d; padding-bottom: 0.4rem;">
+              <span style="color: var(--text-muted);">JSON-RPC Protocol:</span>
+              <span style="color: #38bdf8;">2.0 (spec 2024-11-05)</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #1f293d; padding-bottom: 0.4rem;">
+              <span style="color: var(--text-muted);">HTTP RPC Endpoint:</span>
+              <span style="color: #34d399;">/api/mcp/rpc</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #1f293d; padding-bottom: 0.4rem;">
+              <span style="color: var(--text-muted);">Stdio Integration:</span>
+              <span style="color: #a78bfa;">talon mcp serve</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-muted);">Compatible Clients:</span>
+              <span style="color: #f3f4f6;">Claude Desktop, Cursor, AGY</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Import Remote MCP Server Tools</div>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+            Auto-synthesize sandboxed procedural skills by connecting to any external HTTP MCP server endpoint:
+          </p>
+          <div style="margin-bottom: 0.75rem;">
+            <input type="text" id="mcp-import-url" class="chat-input" placeholder="http://127.0.0.1:8000/rpc" style="width: 100%; margin-bottom: 0.5rem;" />
+            <div style="display: flex; gap: 0.5rem;">
+              <input type="text" id="mcp-import-prefix" class="chat-input" placeholder="prefix (e.g. ext)" style="width: 120px;" value="ext" />
+              <button class="btn" style="flex: 1;" onclick="importMcpTools()">Discover & Import Tools</button>
+            </div>
+          </div>
+          <div id="mcp-import-status" style="font-size: 0.8rem; color: var(--text-muted); display: none;"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>Active MCP Tools</span>
+          <button class="btn" style="padding: 0.25rem 0.75rem; font-size: 0.75rem;" onclick="loadMcpTools()">Refresh</button>
+        </div>
+        <div id="mcp-tools-list" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem;">
+          <div style="color: var(--text-muted); font-size: 0.875rem;">Loading MCP tools...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 6: LIVE PLAYGROUND (SSE STREAMING) -->
     <section id="chat" class="tab-content">
       <div class="chat-container">
         <div class="chat-messages" id="chat-messages">
@@ -473,12 +596,16 @@ export function getDashboardHtml(): string {
     function switchTab(tabId) {
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-      event.target.classList.add('active');
-      document.getElementById(tabId).classList.add('active');
+      if (typeof event !== 'undefined' && event?.target?.classList) {
+        event.target.classList.add('active');
+      }
+      const el = document.getElementById(tabId);
+      if (el) el.classList.add('active');
 
       if (tabId === 'traces') loadTraces();
       if (tabId === 'skills') loadSkills();
       if (tabId === 'overview') loadStats();
+      if (tabId === 'mcp') loadMcpTools();
     }
 
     async function loadStats() {

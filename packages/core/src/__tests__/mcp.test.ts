@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { McpServer } from '../mcp/mcp-server.js';
 import { McpClientAdapter } from '../mcp/mcp-client.js';
+import { McpToolBridge } from '../mcp/mcp-bridge.js';
 import { LibSqlMemoryAdapter } from '@opentalon/memory';
 import { SandboxedVmRunner } from '@opentalon/skill-engine';
 
@@ -126,4 +127,35 @@ describe('MCP Protocol - Server & Client Handshake', () => {
     };
     expect(callResult.content[0].text).toContain('"result": 125');
   });
+
+  it('imports remote MCP tools into procedural memory via McpToolBridge', async () => {
+    const client = new McpClientAdapter({
+      name: 'remote-test-client',
+      transport: 'in_process',
+      handler: (req) => server.handleMessage(req),
+    });
+
+    const report = await McpToolBridge.importMcpTools(client, memory, { prefix: 'ext' });
+    expect(report.importedSkills).toHaveLength(1);
+    expect(report.importedSkills[0].name).toBe('ext_add_two_numbers');
+    expect(report.importedSkills[0].remoteToolName).toBe('add_two_numbers');
+
+    const saved = await memory.getSkill('skill-ext_add_two_numbers');
+    expect(saved).toBeDefined();
+    expect(saved?.name).toBe('ext_add_two_numbers');
+
+    // Verify that the bridged skill can execute in sandboxed VM
+    const execResult = await sandbox.execute({
+      code: saved!.code,
+      args: { a: 10, b: 20 },
+      capabilities: saved!.capabilities,
+    });
+    expect(execResult.success).toBe(true);
+    expect(execResult.data).toMatchObject({
+      tool: 'add_two_numbers',
+      executedArgs: { a: 10, b: 20 },
+      mcpBridged: true,
+    });
+  });
 });
+
