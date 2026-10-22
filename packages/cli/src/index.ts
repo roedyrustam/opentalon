@@ -240,15 +240,6 @@ program
     console.log(`Press Ctrl+C to terminate the dashboard.\n`);
   });
 
-// 5. `talon mcp`
-program
-  .command('mcp')
-  .description('Run OpenTalon as a Model Context Protocol (MCP) server over stdio')
-  .action(() => {
-    const { mcpServer } = getComponents();
-    mcpServer.startStdio();
-  });
-
 // 6. `talon evolve`
 program
   .command('evolve')

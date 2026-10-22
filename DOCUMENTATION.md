@@ -399,6 +399,29 @@ export default {
 };
 ```
 
+### 3. Gateway REST & JSON-RPC Endpoints
+
+When running `talon serve` or `LocalDaemonAdapter`, the following endpoints are available:
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/health` | Healthcheck and active daemon mode (`{"status":"ok","daemon":"local"}`) |
+| `GET` | `/dashboard` | Interactive Dual-Brain Web Cockpit UI with live 3D telemetry core |
+| `POST` | `/v1/chat` | Standard single-turn agent execution endpoint |
+| `POST` | `/v1/stream` | Server-Sent Events (SSE) streaming chat endpoint |
+| `GET` | `/api/stats` | Telemetry counters: skillsCount, tracesCount, factsCount, avgLatencyMs |
+| `GET` | `/api/skills` | List all registered procedural skills |
+| `POST` | `/api/skills/test` | Execute a skill directly in the Zero-Trust Sandbox (`{ name, args }`) |
+| `GET` | `/api/traces` | Retrieve the last 50 episodic execution traces |
+| `GET` | `/api/facts` | List semantic facts, optional filter `?category=<cat>` |
+| `POST` | `/api/facts` | Store a new semantic fact (`{ category, key, value, confidence }`) |
+| `DELETE` | `/api/facts?id=<id>` | Delete a semantic fact from memory |
+| `GET` | `/api/facts/search?q=<query>` | Full-text FTS5 keyword search across semantic memory |
+| `GET` | `/api/mcp/tools` | List MCP tools exposed by the gateway |
+| `POST` | `/api/mcp/rpc` | Model Context Protocol JSON-RPC 2.0 dispatch endpoint |
+| `POST` | `/api/mcp/import` | Auto-discover & synthesize skills from external HTTP MCP server |
+| `POST` | `/api/swarm/execute` | Dispatch Swarm topologies (`fan_out_fan_in`, `pipeline_saga`, `critic_validator_loop`) |
+
 ---
 
 ## Authoring Procedural Skills (`SKILL.md`)

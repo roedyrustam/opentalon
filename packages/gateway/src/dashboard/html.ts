@@ -321,6 +321,7 @@ export function getDashboardHtml(): string {
       <button class="tab-btn" onclick="switchTab('skills')">Procedural Skills</button>
       <button class="tab-btn" onclick="switchTab('swarm')">Swarm Topologies</button>
       <button class="tab-btn" onclick="switchTab('mcp')">MCP Hub</button>
+      <button class="tab-btn" onclick="switchTab('facts')">Semantic Memory</button>
       <button class="tab-btn" onclick="switchTab('chat')">Live Playground</button>
     </nav>
   </header>
@@ -374,6 +375,11 @@ export function getDashboardHtml(): string {
           <div class="stat-label">Avg Execution Latency</div>
           <div class="stat-value tabular-nums" id="stat-avg-latency">-- <span style="font-size: 1rem; color: var(--text-muted);">ms</span></div>
           <div class="stat-desc">In-process zero network overhead</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Semantic Facts</div>
+          <div class="stat-value tabular-nums" id="stat-facts-count">--</div>
+          <div class="stat-desc">Zero-Latency System-1 context injection</div>
         </div>
       </div>
 
@@ -574,7 +580,67 @@ export function getDashboardHtml(): string {
       </div>
     </section>
 
-    <!-- TAB 6: LIVE PLAYGROUND (SSE STREAMING) -->
+    <!-- TAB 6: SEMANTIC MEMORY (FACTS & KNOWLEDGE) -->
+    <section id="facts" class="tab-content">
+      <div style="display: grid; grid-template-columns: 360px 1fr; gap: 1.5rem; margin-bottom: 1.5rem; align-items: start;">
+        <!-- Left: Add New Fact Form -->
+        <div class="card">
+          <div class="card-title">Store Semantic Fact</div>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+            Store persistent user preferences, system constraints, or domain rules that are automatically retrieved and injected into the Fast Path prompt.
+          </p>
+          <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <div>
+              <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 0.25rem;">Category</label>
+              <select id="fact-new-category" class="chat-input" style="width: 100%;">
+                <option value="user_preference">User Preference</option>
+                <option value="system_rule">System Rule</option>
+                <option value="domain_knowledge">Domain Knowledge</option>
+                <option value="developer_habit">Developer Habit</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 0.25rem;">Key / Subject</label>
+              <input type="text" id="fact-new-key" class="chat-input" placeholder="e.g. preferred_currency" style="width: 100%;" />
+            </div>
+            <div>
+              <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 0.25rem;">Value / Instruction</label>
+              <textarea id="fact-new-value" class="chat-input" rows="3" placeholder="e.g. Always format prices in USD with two decimals" style="width: 100%; resize: vertical;"></textarea>
+            </div>
+            <div>
+              <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 0.25rem;">Confidence Score (0.1 - 1.0)</label>
+              <input type="number" id="fact-new-confidence" class="chat-input" value="1.0" min="0.1" max="1.0" step="0.1" style="width: 100%;" />
+            </div>
+            <button class="btn" onclick="saveNewFact()" style="margin-top: 0.5rem;">Save Fact to Memory</button>
+            <div id="fact-save-status" style="font-size: 0.8rem; display: none;"></div>
+          </div>
+        </div>
+
+        <!-- Right: Search & Fact Explorer -->
+        <div class="card">
+          <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+            <span>Active Knowledge Items</span>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <input type="text" id="fact-search-input" class="chat-input" placeholder="Search facts..." style="width: 180px; padding: 0.4rem 0.75rem; font-size: 0.825rem;" onkeydown="if(event.key==='Enter') searchFacts()" />
+              <select id="fact-filter-category" class="chat-input" style="padding: 0.4rem 0.75rem; font-size: 0.825rem;" onchange="loadFacts()">
+                <option value="">All Categories</option>
+                <option value="user_preference">User Preferences</option>
+                <option value="system_rule">System Rules</option>
+                <option value="domain_knowledge">Domain Knowledge</option>
+                <option value="developer_habit">Developer Habits</option>
+              </select>
+              <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.825rem;" onclick="loadFacts()">Refresh</button>
+            </div>
+          </div>
+
+          <div id="facts-list-container" style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem;">
+            <div style="color: var(--text-muted);">Loading semantic memory facts...</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 7: LIVE PLAYGROUND (SSE STREAMING) -->
     <section id="chat" class="tab-content">
       <div class="chat-container">
         <div class="chat-messages" id="chat-messages">
@@ -606,6 +672,7 @@ export function getDashboardHtml(): string {
       if (tabId === 'skills') loadSkills();
       if (tabId === 'overview') loadStats();
       if (tabId === 'mcp') loadMcpTools();
+      if (tabId === 'facts') loadFacts();
     }
 
     async function loadStats() {
@@ -615,6 +682,8 @@ export function getDashboardHtml(): string {
         document.getElementById('stat-skills-count').innerText = data.skillsCount;
         document.getElementById('stat-traces-count').innerText = data.tracesCount;
         document.getElementById('stat-avg-latency').innerHTML = data.avgLatencyMs + ' <span style="font-size: 1rem; color: var(--text-muted);">ms</span>';
+        const factsEl = document.getElementById('stat-facts-count');
+        if (factsEl) factsEl.innerText = data.factsCount ?? 0;
       } catch (e) {
         console.error('Failed to load stats', e);
       }
@@ -958,6 +1027,144 @@ export function getDashboardHtml(): string {
       } catch (e) {
         statusDiv.style.color = '#ef4444';
         statusDiv.innerText = 'Import failure: ' + e.message;
+      }
+    }
+
+    // Semantic Memory Controller
+    async function loadFacts() {
+      const container = document.getElementById('facts-list-container');
+      if (!container) return;
+      container.innerHTML = '<div style="color: var(--text-muted);">Loading semantic facts...</div>';
+
+      const catFilter = document.getElementById('fact-filter-category').value;
+      const url = catFilter ? '/api/facts?category=' + encodeURIComponent(catFilter) : '/api/facts';
+
+      try {
+        const res = await fetch(url);
+        const facts = await res.json();
+
+        if (facts.length === 0) {
+          container.innerHTML = '<div style="color: var(--text-muted); padding: 1rem 0;">No semantic facts recorded in this category. Use the form on the left to add one!</div>';
+          return;
+        }
+
+        container.innerHTML = facts.map(f => \`
+          <div style="background: #0d131f; border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: start; gap: 1rem;">
+            <div style="flex: 1;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem;">
+                <span class="badge \${f.category === 'user_preference' ? 'badge-blue' : f.category === 'system_rule' ? 'badge-purple' : 'badge-success'}">\${escapeHtml(f.category)}</span>
+                <strong style="color: #38bdf8; font-family: var(--font-mono); font-size: 0.9rem;">\${escapeHtml(f.key)}</strong>
+                <span style="font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-mono);">Score: \${f.confidence}</span>
+              </div>
+              <div style="font-size: 0.875rem; color: #e5e7eb; line-height: 1.4; margin-bottom: 0.4rem;">\${escapeHtml(f.value)}</div>
+              <div style="font-size: 0.725rem; color: var(--text-muted); font-family: var(--font-mono);">ID: \${escapeHtml(f.id)}</div>
+            </div>
+            <button class="btn" style="background: #dc2626; padding: 0.3rem 0.6rem; font-size: 0.75rem;" onclick="deleteFact('\${escapeHtml(f.id)}')">Delete</button>
+          </div>
+        \`).join('');
+      } catch (err) {
+        container.innerHTML = '<div style="color: #ef4444;">Failed to load facts: ' + err.message + '</div>';
+      }
+    }
+
+    async function searchFacts() {
+      const q = document.getElementById('fact-search-input').value.trim();
+      if (!q) {
+        loadFacts();
+        return;
+      }
+
+      const container = document.getElementById('facts-list-container');
+      container.innerHTML = '<div style="color: var(--text-muted);">Searching knowledge with FTS5...</div>';
+
+      try {
+        const catFilter = document.getElementById('fact-filter-category').value;
+        const url = '/api/facts/search?q=' + encodeURIComponent(q) + (catFilter ? '&category=' + encodeURIComponent(catFilter) : '');
+        const res = await fetch(url);
+        const facts = await res.json();
+
+        if (facts.length === 0) {
+          container.innerHTML = '<div style="color: var(--text-muted); padding: 1rem 0;">No matching facts found for "' + escapeHtml(q) + '".</div>';
+          return;
+        }
+
+        container.innerHTML = facts.map(f => \`
+          <div style="background: #0d131f; border: 1px solid var(--card-border); border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: start; gap: 1rem;">
+            <div style="flex: 1;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem;">
+                <span class="badge \${f.category === 'user_preference' ? 'badge-blue' : f.category === 'system_rule' ? 'badge-purple' : 'badge-success'}">\${escapeHtml(f.category)}</span>
+                <strong style="color: #38bdf8; font-family: var(--font-mono); font-size: 0.9rem;">\${escapeHtml(f.key)}</strong>
+              </div>
+              <div style="font-size: 0.875rem; color: #e5e7eb; line-height: 1.4;">\${escapeHtml(f.value)}</div>
+            </div>
+            <button class="btn" style="background: #dc2626; padding: 0.3rem 0.6rem; font-size: 0.75rem;" onclick="deleteFact('\${escapeHtml(f.id)}')">Delete</button>
+          </div>
+        \`).join('');
+      } catch (err) {
+        container.innerHTML = '<div style="color: #ef4444;">Search error: ' + err.message + '</div>';
+      }
+    }
+
+    async function saveNewFact() {
+      const category = document.getElementById('fact-new-category').value;
+      const key = document.getElementById('fact-new-key').value.trim();
+      const value = document.getElementById('fact-new-value').value.trim();
+      const confidence = parseFloat(document.getElementById('fact-new-confidence').value) || 1.0;
+      const statusDiv = document.getElementById('fact-save-status');
+
+      if (!key || !value) {
+        alert('Please provide both Key and Value for the fact.');
+        return;
+      }
+
+      statusDiv.style.display = 'block';
+      statusDiv.style.color = '#38bdf8';
+      statusDiv.innerText = 'Saving fact into semantic memory...';
+
+      try {
+        const res = await fetch('/api/facts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category, key, value, confidence }),
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          statusDiv.style.color = '#ef4444';
+          statusDiv.innerText = 'Error: ' + data.error;
+          return;
+        }
+
+        statusDiv.style.color = '#34d399';
+        statusDiv.innerText = 'Fact saved successfully!';
+        document.getElementById('fact-new-key').value = '';
+        document.getElementById('fact-new-value').value = '';
+        setTimeout(() => { statusDiv.style.display = 'none'; }, 3000);
+
+        loadFacts();
+        loadStats();
+      } catch (err) {
+        statusDiv.style.color = '#ef4444';
+        statusDiv.innerText = 'Failed: ' + err.message;
+      }
+    }
+
+    async function deleteFact(factId) {
+      if (!confirm('Are you sure you want to delete this fact from semantic memory?')) return;
+
+      try {
+        const res = await fetch('/api/facts?id=' + encodeURIComponent(factId), {
+          method: 'DELETE',
+        });
+        const data = await res.json();
+        if (data.success) {
+          loadFacts();
+          loadStats();
+        } else {
+          alert('Could not delete fact.');
+        }
+      } catch (err) {
+        alert('Delete failed: ' + err.message);
       }
     }
 

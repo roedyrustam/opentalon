@@ -1,14 +1,22 @@
 # Session Checkpoint: OpenTalon Platform Evolution
 
-- **Status**: Implemented, Extended & Fully Verified (100% Tests Passing)
+- **Status**: Daemon Active & Running (http://127.0.0.1:3100), 100% Tests Passing (64/64)
 - **Active Document**: `c:\talon\DOCUMENTATION.md`
 - **Milestones Completed**:
-  1. **Slow Path Closed-Loop**: Circuit Breaker, FinOps throttle, debounced queue, auto-flush, deterministic opportunity IDs.
-  2. **Visual 3D Identity**: Master 3D visual render (`assets/opentalon-3d-master.jpg`), animated 3D SVG brandmark & icon (`assets/logo.svg`, `assets/icon.svg`), standalone 60FPS 3D WebGL/Canvas holographic showcase (`assets/3d-logo-showcase.html`), and embedded live 3D core in dashboard cockpit.
-  3. **Developer CLI Expansion**: Added `talon skills run/info/remove`, full `talon mcp` suite (`serve`, `list`, `call`, `import`), and `talon memory` suite (`list`, `add`, `search`, `remove`) for semantic knowledge and preferences.
-  4. **MCP Tool Bridge**: Seamless discovery of remote MCP tools via `McpClientAdapter` and automatic synthesis into sandboxed procedural skills in libSQL memory via `McpToolBridge`.
-  5. **Cockpit Web Dashboard**: Added **Swarm Topologies** interactive dispatcher (Fan-Out/Fan-In, Pipeline Saga, Critic-Validator Loop) and **MCP Hub** live JSON-RPC tool inspector & importer.
-  6. **Semantic Memory Tier**: Added `SemanticFact` model, table `semantic_facts`, and full-text index `fts_facts` in `@opentalon/memory`. Dynamic auto-retrieval and system prefix injection in `DualBrainRouter`.
-  7. **Adaptive Tool Self-Healing**: Automated single repair pass in Fast Path when a sandboxed tool throws parameter or runtime errors.
-  8. **Production Skills Gallery (10 Skills)**: Added `web-content-extractor.md` and `json-schema-guard.md` alongside `doku-payment-checkout.md`, `rag-document-retriever.md`, `currency-converter.md`, `csv-data-pipeline.md`, `crypto-signer.md`, etc.
-  9. **Test Suite**: 64/64 tests passing across all 11 test suites with 0 regressions. Full monorepo build passing.
+  1. **Live Local Gateway Daemon**: Running on `http://127.0.0.1:3100` (`talon serve`), providing `/health`, `/dashboard`, `/v1/chat`, `/v1/stream`, `/api/stats`, `/api/skills`, `/api/traces`, `/api/facts`, `/api/mcp/*`, and `/api/swarm/execute`.
+  2. **Visual Cockpit Dashboard (7 Tabs)**:
+     - **Overview**: 3D Quantum Holographic Core (60FPS animated canvas) + 5 live telemetry cards (Budget, Skills, Traces, Latency, Facts).
+     - **Episodic Traces**: Filterable execution traces, latency, and token consumption table.
+     - **Procedural Skills**: Capability whitelist matrix & Zero-Trust Sandbox interactive runner.
+     - **Swarm Topologies**: Interactive visual dispatcher for Fan-Out/Fan-In, Pipeline Saga, and Critic-Validator Loop.
+     - **MCP Hub**: Real-time Model Context Protocol server status, tool caller, and remote tool importer.
+     - **Semantic Memory**: Persistent fact/preference manager with category filter (`user_preference`, `system_rule`, `domain_knowledge`, `developer_habit`), FTS5 search, and single-click deletion.
+     - **Live Playground**: Real-time SSE streaming chat with system-1 tool execution.
+  3. **Semantic Memory Tier**: Added `SemanticFact` model, table `semantic_facts`, and full-text index `fts_facts` in `@opentalon/memory`. Dynamic auto-retrieval and system prefix injection in `DualBrainRouter`.
+  4. **REST APIs for Facts**: `GET /api/facts`, `POST /api/facts`, `DELETE /api/facts?id=...`, `GET /api/facts/search?q=...`.
+  5. **Developer CLI Expansion**: `talon serve`, `talon dashboard`, `talon evolve`, `talon swarm (fanout|saga|critic)`, `talon skills (list|add|run|info|remove)`, `talon mcp (serve|list|call|import)`, `talon memory (list|add|search|remove)`.
+  6. **MCP Tool Bridge**: Seamless discovery of remote MCP tools via `McpClientAdapter` and automatic synthesis into sandboxed procedural skills via `McpToolBridge`.
+  7. **Slow Path Closed-Loop**: Circuit Breaker, FinOps throttle, debounced queue, auto-flush, deterministic opportunity IDs.
+  8. **Adaptive Tool Self-Healing**: Automated repair pass in Fast Path when a sandboxed tool throws parameter or runtime errors.
+  9. **Production Skills Gallery (10 Skills)**: Complete, production-grade skills with zero-trust capability matrices and verified test cases.
+  10. **Test Hygiene**: 64/64 tests passing across all 11 test suites with 0 regressions. Full monorepo build passing.

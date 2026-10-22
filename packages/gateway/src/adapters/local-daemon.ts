@@ -168,6 +168,40 @@ export class LocalDaemonAdapter {
           return;
         }
 
+        // 5d. Delete Semantic Fact API
+        if (req.method === 'DELETE' && url.pathname === '/api/facts') {
+          try {
+            const id = url.searchParams.get('id');
+            if (!id) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Missing "id" query parameter' }));
+              return;
+            }
+            const deleted = await this.router.getMemory().deleteFact(id);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: deleted, id }));
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+          return;
+        }
+
+        // 5e. Search Semantic Facts API
+        if (req.method === 'GET' && url.pathname === '/api/facts/search') {
+          try {
+            const q = url.searchParams.get('q') || '';
+            const category = url.searchParams.get('category') || undefined;
+            const results = await this.router.getMemory().searchFacts(q, { category });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(results));
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+          return;
+        }
+
         // 6. Test Skill in Sandbox API
         if (req.method === 'POST' && url.pathname === '/api/skills/test') {
           let body = '';
