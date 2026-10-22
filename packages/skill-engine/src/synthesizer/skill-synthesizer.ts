@@ -29,10 +29,16 @@ export interface SynthesisResult {
 export class SkillSynthesizer {
   private sandbox: ISkillSandbox;
   private versionManager: SkillVersionManager;
+  private callSkillResolver?: (name: string, args: Record<string, unknown>) => Promise<unknown>;
 
-  constructor(sandbox?: ISkillSandbox, versionManager?: SkillVersionManager) {
+  constructor(
+    sandbox?: ISkillSandbox,
+    versionManager?: SkillVersionManager,
+    callSkillResolver?: (name: string, args: Record<string, unknown>) => Promise<unknown>
+  ) {
     this.sandbox = sandbox ?? new SandboxedVmRunner();
     this.versionManager = versionManager ?? new SkillVersionManager();
+    this.callSkillResolver = callSkillResolver;
   }
 
   /**
@@ -42,6 +48,15 @@ export class SkillSynthesizer {
     candidate: SynthesisCandidate,
     baseVersion = '1.0.0'
   ): Promise<SynthesisResult> {
+    const defaultDryRunCallSkill =
+      this.callSkillResolver ??
+      (async (targetSkillName, targetArgs) => ({
+        mocked: true,
+        skill: targetSkillName,
+        args: targetArgs,
+        converted: { EUR: 92, IDR: 1580000 },
+      }));
+
     // 1. Verify candidate code in Zero-Trust Sandbox
     if (candidate.testCases && candidate.testCases.length > 0) {
       for (const tc of candidate.testCases) {
@@ -50,6 +65,7 @@ export class SkillSynthesizer {
           args: tc.args,
           capabilities: candidate.capabilities,
           timeoutMs: 3000,
+          callSkill: defaultDryRunCallSkill,
         });
 
         if (!execResult.success) {
@@ -80,6 +96,7 @@ export class SkillSynthesizer {
         args: {},
         capabilities: candidate.capabilities,
         timeoutMs: 3000,
+        callSkill: defaultDryRunCallSkill,
       });
 
       if (!dryRun.success) {

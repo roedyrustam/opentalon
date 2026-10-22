@@ -14,6 +14,12 @@ export const SkillCapabilitiesSchema = z.object({
     })
     .optional(),
   env: z.array(z.string()).optional(),
+  skills: z
+    .object({
+      allowedSkills: z.array(z.string()).default([]),
+      maxChainDepth: z.number().default(3),
+    })
+    .optional(),
 });
 
 export type SkillCapabilities = z.infer<typeof SkillCapabilitiesSchema>;

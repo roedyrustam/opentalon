@@ -375,13 +375,28 @@ export interface SkillCapabilities {
     writePaths: string[];  // Sandboxed directory write permissions
   };
   env?: string[];          // Allowed environment variable keys only
+  skills?: {
+    allowedSkills: string[]; // Whitelisted procedural skills (e.g. ["convert_currency"] or ["*"])
+    maxChainDepth?: number;  // Max recursion depth (default: 3)
+  };
+}
+```
+
+### Skill Chaining & Procedural Mesh
+Skills can call other procedural skills in memory via `callSkill()` or `skills.call()`:
+```javascript
+export default async function run(args) {
+  // Directly invoke another sandboxed skill under Zero-Trust rules
+  const rates = await callSkill('convert_currency', { amount: args.total });
+  return { ...args, converted: rates.converted };
 }
 ```
 
 ### Security Invariants
 1. **Host Globals Stripped**: `process.exit`, `process.env`, `require('child_process')`, and un-sandboxed `fs` are completely inaccessible.
 2. **Virtual Interceptors**: Virtualized `fetch` and filesystem abstractions validate target paths and domains against `SkillCapabilities` before executing.
-3. **Execution Guardrails**:
+3. **Chaining Isolation & Recursion Guard**: Skills can only call skills declared in `capabilities.skills.allowedSkills`. A hard `maxChainDepth` (default 3) prevents infinite recursive loops or circular call traps.
+4. **Execution Guardrails**:
    - Default timeout: 5,000ms (prevents infinite loops or blocking code).
    - Memory limit: 16MB per execution isolate.
    - Deterministic JSON-serializable argument and return data boundaries.
@@ -405,24 +420,53 @@ Where default constant $k = 60$. If vector embeddings are unavailable or offline
 
 ## LLM Driver Providers
 
-`@opentalon/core` implements modular drivers adhering to the `ILLMDriver` interface:
+`@opentalon/core` implements modular drivers adhering to the `ILLMPort` interface:
 
 | Driver | Configuration / Features |
 | :--- | :--- |
-| **`GeminiDriver`** | Dynamic Thinking Budget (`thinkingBudget`), KV-Cache Prefix Pinning, automatic fallback from primary (`gemini-2.5-pro`) to fast tier (`gemini-2.5-flash`). |
-| **`OpenAIDriver`** | Supports GPT-4o, GPT-4o-mini, and compatible OpenAI-compliant endpoints (Ollama, vLLM). |
+| **`CascadingLLMDriver`** | **Adaptive Model Cascading & Circuit Breaker**. Hierarchically falls back across multiple providers (Gemini -> Claude -> DeepSeek -> OpenAI -> Ollama -> Mock) if rate limits (HTTP 429), timeouts, or API outages occur. |
+| **`GeminiDriver`** | Dynamic Thinking Budget (`thinkingBudget`), KV-Cache Prefix Pinning, automatic fallback from primary (`gemini-3.5-flash-lite`) to fast tier (`gemini-3.8-flash`). |
+| **`AnthropicDriver`** | Native support for Claude 3.7 Sonnet / Claude 3.5 Sonnet Messages API with hybrid thinking tokens and native tool use blocks. |
+| **`DeepSeekDriver`** | High-performance inferencing for DeepSeek-V3 (`deepseek-chat`) and DeepSeek-R1 (`deepseek-reasoner` with `reasoning_content` extraction). |
+| **`OllamaDriver`** | 100% offline local SLM execution (Qwen 2.5, Llama 3, Mistral) with local vector embeddings (`nomic-embed-text`) via HTTP. |
+| **`OpenAIDriver`** | Supports GPT-4o, GPT-4o-mini, and compatible OpenAI-compliant endpoints. |
 | **`MockLLMDriver`** | Zero-latency, deterministic driver for offline CI/CD, unit testing, and sandbox verification. |
 
-### Environment Variables
+### Environment Variables & Priority Tiers
 ```bash
-# For Gemini Driver
-export GEMINI_API_KEY="your-google-api-key"
-export TALON_MODEL="gemini-2.5-pro"
+# 1. Primary: Google Gemini
+export GEMINI_API_KEY="your-gemini-key"
+export GEMINI_MODEL="gemini-3.5-flash-lite"
+export GEMINI_PRIORITY=0
 
-# For OpenAI Driver
-export OPENAI_API_KEY="your-openai-api-key"
-export TALON_MODEL="gpt-4o-mini"
+# 2. Fallback Tier 1: Anthropic Claude
+export ANTHROPIC_API_KEY="your-anthropic-key"
+export ANTHROPIC_MODEL="claude-3-7-sonnet-20250219"
+export ANTHROPIC_PRIORITY=1
+
+# 3. Fallback Tier 2: DeepSeek
+export DEEPSEEK_API_KEY="your-deepseek-key"
+export DEEPSEEK_MODEL="deepseek-chat"
+export DEEPSEEK_PRIORITY=2
+
+# 4. Fallback Tier 3: OpenAI
+export OPENAI_API_KEY="your-openai-key"
+export OPENAI_MODEL="gpt-4o-mini"
+export OPENAI_PRIORITY=3
+
+# 5. Fallback Tier 4: Local Ollama (Offline)
+export OLLAMA_ENABLED="true"
+export OLLAMA_BASE_URL="http://127.0.0.1:11434"
+export OLLAMA_MODEL="qwen2.5:7b"
+export OLLAMA_PRIORITY=4
 ```
+
+### Inspecting Provider Health
+Check real-time health and circuit breaker cooldowns with:
+```bash
+talon providers
+```
+
 
 ---
 

@@ -14,6 +14,12 @@ export const CapabilityGrantSchema = z.object({
     })
     .optional(),
   env: z.array(z.string()).optional(),
+  skills: z
+    .object({
+      allowedSkills: z.array(z.string()).default([]),
+      maxChainDepth: z.number().default(3),
+    })
+    .optional(),
 });
 
 export const SkillCapabilitiesSchema = CapabilityGrantSchema;
@@ -46,6 +52,8 @@ export interface SandboxExecutionOptions {
   capabilities: CapabilityGrant;
   timeoutMs?: number;
   memoryLimitBytes?: number;
+  chainDepth?: number;
+  callSkill?: (skillName: string, args: Record<string, unknown>, currentDepth: number) => Promise<unknown>;
 }
 
 export interface SandboxExecutionResult {

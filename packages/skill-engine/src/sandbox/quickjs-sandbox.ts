@@ -40,11 +40,28 @@ export class SandboxedVmRunner implements ISkillSandbox {
       // Sandboxed virtualized filesystem
       const virtualFs = new VirtualFs(options.capabilities.fs);
 
+      // Sandboxed skill chaining caller
+      const virtualCallSkill = async (targetSkillName: string, targetArgs: Record<string, unknown> = {}) => {
+        CapabilityValidator.assertSkillCallAllowed(
+          targetSkillName,
+          options.capabilities.skills,
+          options.chainDepth ?? 0
+        );
+        if (!options.callSkill) {
+          throw new Error(`Skill chaining runtime is not configured to call "${targetSkillName}"`);
+        }
+        return await options.callSkill(targetSkillName, targetArgs, (options.chainDepth ?? 0) + 1);
+      };
+
       // Construct sandboxed context
       const sandboxContext = vm.createContext({
         console: virtualConsole,
         fetch: virtualFetch,
         env: virtualEnv,
+        callSkill: virtualCallSkill,
+        skills: {
+          call: virtualCallSkill,
+        },
         fs: {
           readFile: (p: string) => virtualFs.readFile(p),
           writeFile: (p: string, c: string) => virtualFs.writeFile(p, c),

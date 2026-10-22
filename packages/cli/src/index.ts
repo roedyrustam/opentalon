@@ -6,6 +6,10 @@ import {
   DualBrainRouter,
   GeminiDriver,
   OpenAIDriver,
+  AnthropicDriver,
+  DeepSeekDriver,
+  OllamaDriver,
+  CascadingLLMDriver,
   MockLLMDriver,
   EvolutionEngine,
   McpServer,
@@ -13,6 +17,8 @@ import {
   McpToolBridge,
   SwarmDirector,
   type ChatMessage,
+  type ILLMPort,
+  type CascadeProvider,
 } from '@opentalon/core';
 import { LibSqlMemoryAdapter } from '@opentalon/memory';
 import { SandboxedVmRunner } from '@opentalon/skill-engine';
@@ -63,18 +69,81 @@ function getComponents(dbPath = 'opentalon.db') {
   });
   const sandbox = new SandboxedVmRunner();
 
-  let llm;
+  const providers: CascadeProvider[] = [];
+
+  // 1. Google Gemini (Fast Frugal & Long-Context)
   if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
-    llm = new GeminiDriver({
+    const gemini = new GeminiDriver({
       primaryModel: process.env.GEMINI_MODEL || process.env.TALON_MODEL || 'gemini-3.5-flash-lite',
       fallbackModel: process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.8-flash',
     });
-  } else if (process.env.OPENAI_API_KEY) {
-    llm = new OpenAIDriver({
-      model: process.env.OPENAI_MODEL || process.env.TALON_MODEL || 'gpt-4o-mini',
+    providers.push({
+      name: 'gemini',
+      driver: gemini,
+      priority: Number(process.env.GEMINI_PRIORITY || 0),
+    });
+  }
+
+  // 2. Anthropic Claude (Frontier Reasoning & Hybrid Thinking)
+  if (process.env.ANTHROPIC_API_KEY) {
+    const claude = new AnthropicDriver({
+      model: process.env.ANTHROPIC_MODEL || 'claude-3-7-sonnet-20250219',
+    });
+    providers.push({
+      name: 'anthropic',
+      driver: claude,
+      priority: Number(process.env.ANTHROPIC_PRIORITY || 1),
+    });
+  }
+
+  // 3. DeepSeek (Ultra-Frugal V3 & R1 Reasoning)
+  if (process.env.DEEPSEEK_API_KEY) {
+    const deepseek = new DeepSeekDriver({
+      model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+    });
+    providers.push({
+      name: 'deepseek',
+      driver: deepseek,
+      priority: Number(process.env.DEEPSEEK_PRIORITY || 2),
+    });
+  }
+
+  // 4. OpenAI (GPT-4o & GPT-4o-mini)
+  if (process.env.OPENAI_API_KEY) {
+    const openai = new OpenAIDriver({
+      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    });
+    providers.push({
+      name: 'openai',
+      driver: openai,
+      priority: Number(process.env.OPENAI_PRIORITY || 3),
+    });
+  }
+
+  // 5. Local Offline Ollama
+  if (process.env.OLLAMA_ENABLED === 'true' || process.env.OLLAMA_MODEL || process.env.OLLAMA_BASE_URL) {
+    const ollama = new OllamaDriver({
+      baseURL: process.env.OLLAMA_BASE_URL,
+      model: process.env.OLLAMA_MODEL || 'qwen2.5:7b',
+    });
+    providers.push({
+      name: 'ollama',
+      driver: ollama,
+      priority: Number(process.env.OLLAMA_PRIORITY || 4),
+    });
+  }
+
+  let llm: ILLMPort;
+
+  if (providers.length > 0) {
+    llm = new CascadingLLMDriver({
+      providers,
+      onFailover: (from, to, error) => {
+        console.warn(`\x1b[33m[CASCADE FAILOVER]\x1b[0m Provider '${from}' error (${error.message}). Gracefully switching to '${to}'...`);
+      },
     });
   } else {
-    console.warn('[WARN] No GEMINI_API_KEY or OPENAI_API_KEY found. Running in offline Mock LLM mode.');
+    console.warn('[WARN] No LLM API keys or Ollama configured. Running in offline Mock LLM mode.');
     llm = new MockLLMDriver();
   }
 
@@ -911,13 +980,33 @@ skillsCommand
     console.log(`   Arguments: ${JSON.stringify(parsedArgs)}`);
     console.log(`   Capabilities: ${JSON.stringify(skill.capabilities)}`);
 
+    const executeWithChain = async (
+      targetSkill: typeof skill,
+      args: Record<string, unknown>,
+      depth = 0
+    ): Promise<any> => {
+      return await sandbox.execute({
+        code: targetSkill.code,
+        args,
+        capabilities: targetSkill.capabilities,
+        timeoutMs: 5000,
+        chainDepth: depth,
+        callSkill: async (name: string, childArgs: Record<string, unknown>, d: number): Promise<unknown> => {
+          const child = await memory.getSkill(name);
+          if (!child) {
+            throw new Error(`Chained skill "${name}" not found in procedural memory.`);
+          }
+          const res: any = await executeWithChain(child, childArgs, d);
+          if (!res.success) {
+            throw new Error(`Chained skill "${name}" failed: ${res.error}`);
+          }
+          return res.data;
+        },
+      });
+    };
+
     const start = Date.now();
-    const result = await sandbox.execute({
-      code: skill.code,
-      args: parsedArgs,
-      capabilities: skill.capabilities,
-      timeoutMs: 5000,
-    });
+    const result = await executeWithChain(skill, parsedArgs, 0);
     const elapsed = Date.now() - start;
 
     await memory.close();
@@ -1190,4 +1279,52 @@ memoryCommand
     console.log(`   • Traces: ${res.importedTraces}\n`);
   });
 
+// 12. `talon providers`
+program
+  .command('providers')
+  .description('Inspect active multi-model cascading providers and circuit breaker health')
+  .action(async () => {
+    const { llm } = getComponents();
+    console.log('\n🤖 \x1b[1mOpenTalon Multi-Model Provider Cascade Status\x1b[0m\n');
+
+    if (llm instanceof CascadingLLMDriver) {
+      const statuses = llm.getProvidersStatus();
+      console.log('Active Providers (ordered by priority):\n');
+      console.log(
+        '  ' +
+          'Priority'.padEnd(10) +
+          'Provider'.padEnd(14) +
+          'Health'.padEnd(16) +
+          'Successes'.padEnd(12) +
+          'Failures'.padEnd(12) +
+          'Cooldown Until'
+      );
+      console.log('  ' + '─'.repeat(80));
+
+      for (const s of statuses) {
+        const healthBadge = s.healthy
+          ? '\x1b[32m● HEALTHY\x1b[0m'
+          : '\x1b[31m▲ COOLDOWN\x1b[0m';
+        const cooldownStr = s.cooldownUntil > Date.now()
+          ? `In ${Math.ceil((s.cooldownUntil - Date.now()) / 1000)}s`
+          : 'None';
+
+        console.log(
+          '  ' +
+            String(s.priority).padEnd(10) +
+            s.name.padEnd(14) +
+            healthBadge.padEnd(25) +
+            String(s.successCount).padEnd(12) +
+            String(s.failureCount).padEnd(12) +
+            cooldownStr
+        );
+      }
+      console.log('\n💡 Cascading automatically shifts traffic to lower priority providers on error or 429.\n');
+    } else {
+      console.log('  Running in single provider mode: ' + (llm.constructor ? llm.constructor.name : 'Unknown'));
+      console.log('  Configure GEMINI_API_KEY, ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, OPENAI_API_KEY, or OLLAMA_MODEL in .env to activate the full multi-model cascade.\n');
+    }
+  });
+
 program.parse(process.argv);
+

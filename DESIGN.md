@@ -76,6 +76,9 @@
 | **ADR-01** | Debounced In-Memory Queue | **Accepted** | Mencegah lonjakan pemanggilan LLM (*thundering herd*) saat banyak turn terjadi bersamaan. | Menerapkan buffer debounce 5 detik di `DualBrainRouter` sebelum memicu `EvolutionEngine`. | Sedikit jeda (5 detik) sebelum skill baru aktif di memori, namun menjamin efisiensi FinOps. |
 | **ADR-02** | Circuit Breaker & Throttle | **Accepted** | Mencegah loop kegagalan tak terbatas saat LLM menghasilkan kode yang gagal di sandbox. | Batasi maksimal 2x percobaan per `opportunity.id` dan batasi rate limit evolusi maksimal 5 skill/jam. | Peluang evolusi yang gagal 2x berturut-turut akan di-discard dan dicatat di audit log. |
 | **ADR-03** | Dedicated CLI Command (`talon evolve`) | **Accepted** | Pengembang membutuhkan cara manual untuk memicu evolusi atau menjalankan evolusi terjadwal di CI/CD. | Menambahkan subcommand `talon evolve` dengan opsi `--limit`, `--dry-run`, dan `--json`. | Menambah surface area CLI `@opentalon/cli`, namun meningkatkan DX secara signifikan. |
+| **ADR-04** | Hexagonal Multi-Model Cascading Driver | **Accepted** | Mencegah ketergantungan pada single provider (Gemini/OpenAI) yang rentan terhadap HTTP 429 atau kuota habis. | Implementasi `CascadingLLMDriver` dengan Circuit Breaker dan daftar prioritas fallback bertingkat (Gemini -> Claude -> DeepSeek -> Ollama -> Mock). | Zero external daemon requirement, 100% kompatibel dengan kontrak `ILLMPort`. |
+| **ADR-05** | Native Anthropic, DeepSeek & Local Ollama Adapters | **Accepted** | Membuka dukungan untuk frontier reasoning (Claude 3.7 Sonnet), ultra-frugal reasoning (DeepSeek-V3/R1), dan eksekusi offline (Ollama). | Tambahkan `AnthropicDriver`, `DeepSeekDriver`, dan `OllamaDriver` menggunakan Web Fetch API murni. | Normalisasi struktur tool calling (JSON Schema parameters vs input_schema) dilakukan di masing-masing adapter driver. |
+| **ADR-06** | Zero-Trust Skill Chaining & Procedural Mesh | **Accepted** | Kebutuhan skill untuk memanggil skill lain secara modular tanpa merusak isolasi Zero-Trust sandbox. | Menambahkan kapabilitas `skills.allowedSkills` dan `maxChainDepth` (default 3), menginjeksi `callSkill()` / `skills.call()` ke dalam isolat VM, dan menyelesaikan pemanggilan rekursif melalui memory port. | Mencegah loop rekursi tak terbatas, menjamin isolasi kapabilitas antar-skill anak. |
 
 ---
 
@@ -87,6 +90,8 @@
    - *Mitigation*: Panggilan LLM pada `EvolutionEngine` dipatok dengan batas token output ketat dan sistem fallback otomatis dari Gemini 2.5 Pro ke Flash.
 3. **Risk: Malicious Skill Injection via User Inputs**
    - *Mitigation*: Sanitasi schema kapabilitas; tolak otomatis skill yang meminta `capabilities.net.allowedHosts = ["*"]` atau akses di luar sandbox.
+4. **Risk: Cascading Latency Overhead & Infinite Failover Loops**
+   - *Mitigation*: Terapkan status Circuit Breaker berjangka waktu (cooldown 60s) per provider. Driver yang gagal tidak dicoba berulang-ulang pada turn yang sama.
 
 ---
 
@@ -106,4 +111,19 @@ export interface EvolveCommandOptions {
   dryRun?: boolean;           // Do not commit to DB
   json?: boolean;             // Output machine-readable JSON report
 }
+
+export interface CascadeProviderConfig {
+  driver: ILLMPort;
+  name: string;
+  priority: number;           // Lower number = higher priority
+  cooldownMs?: number;        // Cooldown period after failure (default 60000ms)
+  isFallbackOnly?: boolean;
+}
+
+export interface CascadingDriverOptions {
+  providers: CascadeProviderConfig[];
+  onFailover?: (fromProvider: string, toProvider: string, error: Error) => void;
+  embeddingDriver?: ILLMPort;
+}
 ```
+

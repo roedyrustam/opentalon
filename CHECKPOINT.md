@@ -53,4 +53,18 @@
   13. **Global CLI Executable Linking**:
      - Linked globally via `npm link` so `talon` command works out of the box in PowerShell, Command Prompt, and bash from any directory.
      - Added native Windows wrappers `talon.cmd` and `talon.ps1` in repository root.
-  14. **Test Hygiene**: 69/69 tests passing across all 11 test suites with 0 regressions. Full monorepo build passing. Local daemon active on `http://127.0.0.1:3100`.
+  14. **Multi-Model Provider Cascading & Local SLM Integration**:
+     - `CascadingLLMDriver` implementing `ILLMPort` with priority-tiered failover and Circuit Breaker cooldowns (prevents infinite failover loops).
+     - Native `AnthropicDriver` with Claude 3.7 hybrid thinking tokens & tool calling.
+     - Native `DeepSeekDriver` with `reasoning_content` extraction for DeepSeek-R1 & V3.
+     - Native `OllamaDriver` for 100% offline local inference (Qwen 2.5, Llama 3) and local vector embeddings.
+     - New CLI command `talon providers` to inspect active cascade configuration and circuit breaker health.
+  15. **Skill Chaining & Procedural Mesh**:
+     - Sandboxed skills can securely invoke other procedural skills in memory via `callSkill(name, args)` or `skills.call(name, args)`.
+     - Whitelist authorization enforced via `capabilities.skills.allowedSkills` (`["skill_name"]` or `["*"]`).
+     - Anti-recursion protection with configurable `maxChainDepth` (default 3) preventing circular traps.
+     - Fully supported in Fast Path `DualBrainRouter`, Zero-Trust `SandboxedVmRunner`, and CLI `talon skills run`.
+     - Added production example skill [`financial-portfolio-planner.md`](examples/skills/financial-portfolio-planner.md) chaining [`currency-converter.md`](examples/skills/currency-converter.md).
+  16. **Test Hygiene**: 81/81 tests passing across all 14 test suites with 0 regressions. Full monorepo build passing. Local daemon active on `http://127.0.0.1:3100`.
+
+

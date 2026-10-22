@@ -9,7 +9,12 @@ import {
   type ILLMPort,
 } from '../types.js';
 import { type IMemoryPort, type ProceduralSkill, type EpisodicTrace } from '@opentalon/memory';
-import { type ISkillSandbox, SkillSynthesizer, SkillMarkdownParser } from '@opentalon/skill-engine';
+import {
+  type ISkillSandbox,
+  type SandboxExecutionResult,
+  SkillSynthesizer,
+  SkillMarkdownParser,
+} from '@opentalon/skill-engine';
 import { EvolutionEngine, type EvolutionReport } from '../evolution/evolution-engine.js';
 import { TokenBudgeter } from '../token/budgeter.js';
 
@@ -158,12 +163,32 @@ export class DualBrainRouter extends EventEmitter {
               ? { ...rawArgs, ...(rawArgs.args as Record<string, unknown>) }
               : { ...rawArgs };
 
-          const sandboxedResult = await this.sandbox.execute({
-            code: matchingSkill.code,
-            args: skillArgs,
-            capabilities: matchingSkill.capabilities,
-            timeoutMs: 5000,
-          });
+          const executeSkillWithMesh = async (
+            skill: ProceduralSkill,
+            args: Record<string, unknown>,
+            currentDepth = 0
+          ): Promise<SandboxExecutionResult> => {
+            return await this.sandbox.execute({
+              code: skill.code,
+              args,
+              capabilities: skill.capabilities,
+              timeoutMs: 5000,
+              chainDepth: currentDepth,
+              callSkill: async (targetSkillName, targetArgs, depth) => {
+                const childSkill = await this.memory.getSkill(targetSkillName);
+                if (!childSkill) {
+                  throw new Error(`Chained skill "${targetSkillName}" not found in procedural memory.`);
+                }
+                const childResult = await executeSkillWithMesh(childSkill, targetArgs, depth);
+                if (!childResult.success) {
+                  throw new Error(`Chained skill "${targetSkillName}" failed: ${childResult.error}`);
+                }
+                return childResult.data;
+              },
+            });
+          };
+
+          const sandboxedResult = await executeSkillWithMesh(matchingSkill, skillArgs, 0);
 
           const durationMs = Date.now() - callStart;
           toolCallsMade.push({

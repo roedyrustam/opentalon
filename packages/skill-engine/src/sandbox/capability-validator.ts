@@ -1,7 +1,7 @@
 import { type CapabilityGrant } from '../types.js';
 
 export class CapabilityViolationError extends Error {
-  constructor(public readonly capability: 'net' | 'fs' | 'env', message: string) {
+  constructor(public readonly capability: 'net' | 'fs' | 'env' | 'skills', message: string) {
     super(`[CapabilityViolationError] Unauthorized access to ${capability}: ${message}`);
     this.name = 'CapabilityViolationError';
   }
@@ -93,6 +93,43 @@ export class CapabilityValidator {
       throw new CapabilityViolationError(
         'env',
         `Environment variable "${key}" access denied. Allowed: [${(grant || []).join(', ')}]`
+      );
+    }
+  }
+
+  /**
+   * Asserts that calling another procedural skill is permitted under skills capabilities.
+   */
+  public static assertSkillCallAllowed(
+    targetSkillName: string,
+    grant?: CapabilityGrant['skills'],
+    currentDepth = 0
+  ): void {
+    if (!grant || !grant.allowedSkills || grant.allowedSkills.length === 0) {
+      throw new CapabilityViolationError(
+        'skills',
+        `Skill chaining denied. No skills are permitted to be called by this skill.`
+      );
+    }
+
+    const cleanTarget = targetSkillName.toLowerCase().trim();
+    const isAllowed = grant.allowedSkills.some((s) => {
+      const clean = s.toLowerCase().trim();
+      return clean === '*' || clean === cleanTarget;
+    });
+
+    if (!isAllowed) {
+      throw new CapabilityViolationError(
+        'skills',
+        `Skill "${targetSkillName}" is not in allowed skills whitelist [${grant.allowedSkills.join(', ')}]`
+      );
+    }
+
+    const maxDepth = grant.maxChainDepth ?? 3;
+    if (currentDepth >= maxDepth) {
+      throw new CapabilityViolationError(
+        'skills',
+        `Maximum skill chaining recursion depth of ${maxDepth} reached when calling "${targetSkillName}"`
       );
     }
   }
