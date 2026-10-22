@@ -76,6 +76,40 @@ export interface SemanticFact {
   updatedAt: number;
 }
 
+export interface ScheduledJob {
+  id: string;
+  name: string;
+  cron: string;
+  actionType: 'prompt' | 'skill';
+  actionPayload: {
+    prompt?: string;
+    skillName?: string;
+    args?: Record<string, unknown>;
+  };
+  status: 'active' | 'paused' | 'running';
+  nextRunAt?: number;
+  lastRunAt?: number;
+  lastStatus?: 'success' | 'failure' | 'timeout' | 'skipped';
+  failureCount: number;
+  maxRetries: number;
+  timeoutMs: number;
+  notifyChannels: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface JobExecutionLog {
+  id: string;
+  jobId: string;
+  startedAt: number;
+  finishedAt?: number;
+  durationMs?: number;
+  status: 'success' | 'failure' | 'timeout';
+  output?: string;
+  errorMessage?: string;
+  tokensUsed: number;
+}
+
 export interface HybridSearchResult<T> {
   item: T;
   score: number;
@@ -121,6 +155,15 @@ export interface IMemoryPort {
   getSkillRevisions(name: string): Promise<SkillRevision[]>;
   rollbackSkill(name: string, targetVersionOrHash: string): Promise<ProceduralSkill>;
 
+  // Scheduled Automations & Cron
+  saveJob(job: ScheduledJob): Promise<void>;
+  getJob(idOrName: string): Promise<ScheduledJob | null>;
+  listJobs(options?: { status?: 'active' | 'paused' | 'running' }): Promise<ScheduledJob[]>;
+  updateJobStatus(id: string, status: 'active' | 'paused' | 'running', updates?: Partial<ScheduledJob>): Promise<void>;
+  deleteJob(id: string): Promise<boolean>;
+  saveJobLog(log: JobExecutionLog): Promise<void>;
+  getJobLogs(jobId?: string, limit?: number): Promise<JobExecutionLog[]>;
+
   // Snapshot Migration & Backup
   exportSnapshot(options?: { includeTraces?: boolean }): Promise<MemorySnapshot>;
   importSnapshot(snapshot: MemorySnapshot, options?: { overwrite?: boolean }): Promise<ImportSnapshotResult>;
@@ -144,6 +187,7 @@ export interface MemorySnapshot {
   exportedAt: number;
   skills: ProceduralSkill[];
   facts: SemanticFact[];
+  jobs?: ScheduledJob[];
   traces?: EpisodicTrace[];
 }
 

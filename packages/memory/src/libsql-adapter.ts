@@ -10,6 +10,8 @@ import {
   type MemorySnapshot,
   type ImportSnapshotResult,
   type SkillRevision,
+  type ScheduledJob,
+  type JobExecutionLog,
 } from './types.js';
 import { cosineSimilarity, reciprocalRankFusion, type RankedItem } from './rrf.js';
 
@@ -144,6 +146,56 @@ export class LibSqlMemoryAdapter implements IMemoryPort {
     } catch {
       // Fallback to LIKE query if FTS5 is not available
     }
+
+    // Scheduled Automations Table
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS scheduled_jobs (
+        id TEXT PRIMARY KEY,
+        name TEXT UNIQUE NOT NULL,
+        cron TEXT NOT NULL,
+        action_type TEXT NOT NULL,
+        action_payload TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',
+        next_run_at INTEGER,
+        last_run_at INTEGER,
+        last_status TEXT,
+        failure_count INTEGER DEFAULT 0,
+        max_retries INTEGER DEFAULT 3,
+        timeout_ms INTEGER DEFAULT 30000,
+        notify_channels TEXT DEFAULT '["sse"]',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_jobs_status_next ON scheduled_jobs(status, next_run_at);
+    `);
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_jobs_name ON scheduled_jobs(name);
+    `);
+
+    // Job Execution Logs Table
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS job_execution_logs (
+        id TEXT PRIMARY KEY,
+        job_id TEXT NOT NULL,
+        started_at INTEGER NOT NULL,
+        finished_at INTEGER,
+        duration_ms INTEGER,
+        status TEXT NOT NULL,
+        output TEXT,
+        error_message TEXT,
+        tokens_used INTEGER DEFAULT 0
+      );
+    `);
+
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_logs_job_time ON job_execution_logs(job_id, started_at DESC);
+    `);
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_logs_time ON job_execution_logs(started_at DESC);
+    `);
 
     this.isInitialized = true;
   }
@@ -687,6 +739,196 @@ export class LibSqlMemoryAdapter implements IMemoryPort {
     };
   }
 
+  private mapRowToJob(row: Record<string, unknown>): ScheduledJob {
+    let actionPayload: ScheduledJob['actionPayload'] = {};
+    try {
+      actionPayload = JSON.parse(String(row.action_payload || '{}'));
+    } catch {
+      actionPayload = {};
+    }
+
+    let notifyChannels: string[] = ['sse'];
+    try {
+      notifyChannels = JSON.parse(String(row.notify_channels || '["sse"]'));
+    } catch {
+      notifyChannels = ['sse'];
+    }
+
+    return {
+      id: String(row.id),
+      name: String(row.name),
+      cron: String(row.cron),
+      actionType: String(row.action_type) as 'prompt' | 'skill',
+      actionPayload,
+      status: String(row.status) as 'active' | 'paused' | 'running',
+      nextRunAt: row.next_run_at ? Number(row.next_run_at) : undefined,
+      lastRunAt: row.last_run_at ? Number(row.last_run_at) : undefined,
+      lastStatus: row.last_status ? (String(row.last_status) as ScheduledJob['lastStatus']) : undefined,
+      failureCount: Number(row.failure_count ?? 0),
+      maxRetries: Number(row.max_retries ?? 3),
+      timeoutMs: Number(row.timeout_ms ?? 30000),
+      notifyChannels,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
+    };
+  }
+
+  private mapRowToJobLog(row: Record<string, unknown>): JobExecutionLog {
+    return {
+      id: String(row.id),
+      jobId: String(row.job_id),
+      startedAt: Number(row.started_at),
+      finishedAt: row.finished_at ? Number(row.finished_at) : undefined,
+      durationMs: row.duration_ms ? Number(row.duration_ms) : undefined,
+      status: String(row.status) as 'success' | 'failure' | 'timeout',
+      output: row.output ? String(row.output) : undefined,
+      errorMessage: row.error_message ? String(row.error_message) : undefined,
+      tokensUsed: Number(row.tokens_used ?? 0),
+    };
+  }
+
+  // --- Scheduled Jobs & Automations Store Methods ---
+
+  public async saveJob(job: ScheduledJob): Promise<void> {
+    await this.initialize();
+    await this.client.execute({
+      sql: `
+        INSERT INTO scheduled_jobs (
+          id, name, cron, action_type, action_payload, status, next_run_at,
+          last_run_at, last_status, failure_count, max_retries, timeout_ms,
+          notify_channels, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          name = excluded.name,
+          cron = excluded.cron,
+          action_type = excluded.action_type,
+          action_payload = excluded.action_payload,
+          status = excluded.status,
+          next_run_at = excluded.next_run_at,
+          last_run_at = excluded.last_run_at,
+          last_status = excluded.last_status,
+          failure_count = excluded.failure_count,
+          max_retries = excluded.max_retries,
+          timeout_ms = excluded.timeout_ms,
+          notify_channels = excluded.notify_channels,
+          updated_at = excluded.updated_at
+      `,
+      args: [
+        job.id,
+        job.name,
+        job.cron,
+        job.actionType,
+        JSON.stringify(job.actionPayload || {}),
+        job.status,
+        job.nextRunAt ?? null,
+        job.lastRunAt ?? null,
+        job.lastStatus ?? null,
+        job.failureCount ?? 0,
+        job.maxRetries ?? 3,
+        job.timeoutMs ?? 30000,
+        JSON.stringify(job.notifyChannels || ['sse']),
+        job.createdAt,
+        job.updatedAt,
+      ],
+    });
+  }
+
+  public async getJob(idOrName: string): Promise<ScheduledJob | null> {
+    await this.initialize();
+    const result = await this.client.execute({
+      sql: `SELECT * FROM scheduled_jobs WHERE id = ? OR name = ? LIMIT 1`,
+      args: [idOrName, idOrName],
+    });
+
+    if (result.rows.length === 0) return null;
+    return this.mapRowToJob(result.rows[0] as unknown as Record<string, unknown>);
+  }
+
+  public async listJobs(options?: { status?: 'active' | 'paused' | 'running' }): Promise<ScheduledJob[]> {
+    await this.initialize();
+    let sql = `SELECT * FROM scheduled_jobs`;
+    const args: (string | number)[] = [];
+    if (options?.status) {
+      sql += ` WHERE status = ?`;
+      args.push(options.status);
+    }
+    sql += ` ORDER BY created_at ASC`;
+
+    const result = await this.client.execute({ sql, args });
+    return result.rows.map((r) => this.mapRowToJob(r as unknown as Record<string, unknown>));
+  }
+
+  public async updateJobStatus(
+    id: string,
+    status: 'active' | 'paused' | 'running',
+    updates?: Partial<ScheduledJob>
+  ): Promise<void> {
+    await this.initialize();
+    const existing = await this.getJob(id);
+    if (!existing) return;
+
+    const nextRunAt = updates?.nextRunAt !== undefined ? updates.nextRunAt : existing.nextRunAt;
+    const lastRunAt = updates?.lastRunAt !== undefined ? updates.lastRunAt : existing.lastRunAt;
+    const lastStatus = updates?.lastStatus !== undefined ? updates.lastStatus : existing.lastStatus;
+    const failureCount = updates?.failureCount !== undefined ? updates.failureCount : existing.failureCount;
+    const updatedAt = updates?.updatedAt !== undefined ? updates.updatedAt : Date.now();
+
+    await this.client.execute({
+      sql: `
+        UPDATE scheduled_jobs
+        SET status = ?, next_run_at = ?, last_run_at = ?, last_status = ?, failure_count = ?, updated_at = ?
+        WHERE id = ?
+      `,
+      args: [status, nextRunAt ?? null, lastRunAt ?? null, lastStatus ?? null, failureCount, updatedAt, id],
+    });
+  }
+
+  public async deleteJob(id: string): Promise<boolean> {
+    await this.initialize();
+    const result = await this.client.execute({
+      sql: `DELETE FROM scheduled_jobs WHERE id = ? OR name = ?`,
+      args: [id, id],
+    });
+    return result.rowsAffected > 0;
+  }
+
+  public async saveJobLog(log: JobExecutionLog): Promise<void> {
+    await this.initialize();
+    await this.client.execute({
+      sql: `
+        INSERT INTO job_execution_logs (
+          id, job_id, started_at, finished_at, duration_ms, status, output, error_message, tokens_used
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      args: [
+        log.id,
+        log.jobId,
+        log.startedAt,
+        log.finishedAt ?? null,
+        log.durationMs ?? null,
+        log.status,
+        log.output ?? null,
+        log.errorMessage ?? null,
+        log.tokensUsed ?? 0,
+      ],
+    });
+  }
+
+  public async getJobLogs(jobId?: string, limit = 50): Promise<JobExecutionLog[]> {
+    await this.initialize();
+    let sql = `SELECT * FROM job_execution_logs`;
+    const args: (string | number)[] = [];
+    if (jobId) {
+      sql += ` WHERE job_id = ?`;
+      args.push(jobId);
+    }
+    sql += ` ORDER BY started_at DESC LIMIT ?`;
+    args.push(limit);
+
+    const result = await this.client.execute({ sql, args });
+    return result.rows.map((r) => this.mapRowToJobLog(r as unknown as Record<string, unknown>));
+  }
+
   /**
    * Export complete memory state (skills, facts, and optional traces) as a portable snapshot.
    */
@@ -695,6 +937,7 @@ export class LibSqlMemoryAdapter implements IMemoryPort {
 
     const skills = await this.listSkills();
     const facts = await this.listFacts({ limit: 10000 });
+    const jobs = await this.listJobs();
     let traces: EpisodicTrace[] | undefined;
 
     if (options?.includeTraces) {
@@ -706,6 +949,7 @@ export class LibSqlMemoryAdapter implements IMemoryPort {
       exportedAt: Date.now(),
       skills,
       facts,
+      jobs,
       traces,
     };
   }
@@ -746,6 +990,20 @@ export class LibSqlMemoryAdapter implements IMemoryPort {
           importedFacts++;
         } catch {
           // Continue on individual fact conflict
+        }
+      }
+    }
+
+    // Import Scheduled Jobs
+    if (snapshot.jobs && Array.isArray(snapshot.jobs)) {
+      for (const job of snapshot.jobs) {
+        try {
+          const existing = await this.getJob(job.name);
+          if (!existing || options?.overwrite) {
+            await this.saveJob(job);
+          }
+        } catch {
+          // Continue on individual job conflict
         }
       }
     }

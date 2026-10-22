@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { LibSqlMemoryAdapter } from '../libsql-adapter.js';
 import { cosineSimilarity, reciprocalRankFusion } from '../rrf.js';
-import { type EpisodicTrace, type ProceduralSkill, type SemanticFact } from '../types.js';
+import {
+  type EpisodicTrace,
+  type ProceduralSkill,
+  type SemanticFact,
+  type ScheduledJob,
+  type JobExecutionLog,
+} from '../types.js';
 
 describe('Memory Package - RRF & Cosine Similarity', () => {
   it('calculates cosine similarity correctly', () => {
@@ -284,6 +290,128 @@ describe('LibSqlMemoryAdapter (In-Memory Engine)', () => {
     const activeSkill = await adapter.getSkill('format_date');
     expect(activeSkill?.version).toBe('1.0.0');
     expect(activeSkill?.code).toContain('toISOString()');
+  });
+
+  it('saves, retrieves, lists, updates, and deletes scheduled jobs', async () => {
+    const job: ScheduledJob = {
+      id: 'job-1',
+      name: 'hourly-health-check',
+      cron: '@hourly',
+      actionType: 'skill',
+      actionPayload: {
+        skillName: 'http_json_fetcher',
+        args: { url: 'https://api.example.com/health' },
+      },
+      status: 'active',
+      nextRunAt: Date.now() + 3600000,
+      failureCount: 0,
+      maxRetries: 3,
+      timeoutMs: 15000,
+      notifyChannels: ['sse', 'webhook'],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    // 1. Save and get job
+    await adapter.saveJob(job);
+    const retrieved = await adapter.getJob('job-1');
+    expect(retrieved).not.toBeNull();
+    expect(retrieved?.name).toBe('hourly-health-check');
+    expect(retrieved?.cron).toBe('@hourly');
+    expect(retrieved?.actionType).toBe('skill');
+    expect(retrieved?.actionPayload.skillName).toBe('http_json_fetcher');
+
+    // Retrieve by name
+    const byName = await adapter.getJob('hourly-health-check');
+    expect(byName?.id).toBe('job-1');
+
+    // 2. List jobs
+    const allJobs = await adapter.listJobs();
+    expect(allJobs.length).toBe(1);
+
+    // 3. Update job status
+    await adapter.updateJobStatus('job-1', 'paused', {
+      lastStatus: 'success',
+      lastRunAt: Date.now(),
+    });
+    const paused = await adapter.getJob('job-1');
+    expect(paused?.status).toBe('paused');
+    expect(paused?.lastStatus).toBe('success');
+
+    // 4. Delete job
+    const deleted = await adapter.deleteJob('job-1');
+    expect(deleted).toBe(true);
+    const afterDelete = await adapter.getJob('job-1');
+    expect(afterDelete).toBeNull();
+  });
+
+  it('records and retrieves job execution logs', async () => {
+    const log1: JobExecutionLog = {
+      id: 'log-1',
+      jobId: 'job-digest',
+      startedAt: Date.now() - 5000,
+      finishedAt: Date.now() - 4000,
+      durationMs: 1000,
+      status: 'success',
+      output: JSON.stringify({ digest: 'All systems green' }),
+      tokensUsed: 450,
+    };
+
+    const log2: JobExecutionLog = {
+      id: 'log-2',
+      jobId: 'job-digest',
+      startedAt: Date.now() - 2000,
+      finishedAt: Date.now() - 1000,
+      durationMs: 1000,
+      status: 'failure',
+      errorMessage: 'Network timeout',
+      tokensUsed: 120,
+    };
+
+    await adapter.saveJobLog(log1);
+    await adapter.saveJobLog(log2);
+
+    const logs = await adapter.getJobLogs('job-digest');
+    expect(logs.length).toBe(2);
+    expect(logs[0].id).toBe('log-2'); // Most recent first
+    expect(logs[0].status).toBe('failure');
+    expect(logs[1].id).toBe('log-1');
+    expect(logs[1].status).toBe('success');
+  });
+
+  it('exports and imports scheduled jobs in memory snapshot', async () => {
+    const job: ScheduledJob = {
+      id: 'job-export',
+      name: 'daily-backup',
+      cron: '@daily',
+      actionType: 'prompt',
+      actionPayload: { prompt: 'Perform daily cleanup' },
+      status: 'active',
+      failureCount: 0,
+      maxRetries: 3,
+      timeoutMs: 30000,
+      notifyChannels: ['sse'],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    await adapter.saveJob(job);
+
+    const snapshot = await adapter.exportSnapshot();
+    expect(snapshot.jobs).toBeDefined();
+    expect(snapshot.jobs?.some((j) => j.name === 'daily-backup')).toBe(true);
+
+    // Import into fresh adapter
+    const freshAdapter = new LibSqlMemoryAdapter({ url: ':memory:' });
+    await freshAdapter.initialize();
+    await freshAdapter.importSnapshot(snapshot);
+
+    const imported = await freshAdapter.getJob('daily-backup');
+    expect(imported).not.toBeNull();
+    expect(imported?.cron).toBe('@daily');
+    expect(imported?.actionPayload.prompt).toBe('Perform daily cleanup');
+
+    await freshAdapter.close();
   });
 });
 

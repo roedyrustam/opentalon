@@ -16,3 +16,4 @@ export * from './mcp/mcp-client.js';
 export * from './mcp/mcp-bridge.js';
 export * from './swarm/types.js';
 export * from './swarm/swarm-director.js';
+export * from './scheduler/index.js';
