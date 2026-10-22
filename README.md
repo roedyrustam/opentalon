@@ -1,7 +1,11 @@
-# OpenTalon 🦅
+<p align="center">
+  <img src="assets/logo.svg" alt="OpenTalon Dual-Brain Logo" width="620" />
+</p>
 
-> **The Self-Evolving, Token-Frugal AI Agent Framework**  
-> Combining **Hermes-style autonomous procedural memory evolution** with **OpenClaw-style hyper-frugal token consumption**, protected by a **Zero-Trust Capability-Gated Sandbox**.
+<p align="center">
+  <strong>Next-Generation, Self-Evolving & Hyper-Frugal AI Agent Framework</strong><br>
+  <em>Combining Hermes-style procedural memory evolution with OpenClaw token frugality under Zero-Trust sandboxing.</em>
+</p>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8%2B-blue?logo=typescript)](https://www.typescriptlang.org/)

@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenTalon — 3D Dynamic Dual-Brain Holographic Core</title>
+  <style>
+    :root {
+      --bg: #07090e;
+      --card: #0e131f;
+      --border: #1e293b;
+      --cyan: #00f2fe;
+      --violet: #d946ef;
+      --emerald: #10b981;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: radial-gradient(circle at 50% 40%, #111a2e 0%, var(--bg) 70%);
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      user-select: none;
+    }
+    .container {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+      z-index: 10;
+    }
+    #talonCanvas {
+      width: 480px;
+      height: 480px;
+      max-width: 90vw;
+      max-height: 90vw;
+      border-radius: 24px;
+      cursor: grab;
+      filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.8));
+    }
+    #talonCanvas:active {
+      cursor: grabbing;
+    }
+    .hud {
+      display: flex;
+      gap: 1rem;
+      background: rgba(14, 19, 31, 0.75);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(16px);
+      padding: 0.75rem 1.25rem;
+      border-radius: 9999px;
+      align-items: center;
+      font-size: 0.85rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+    .mode-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: #94a3b8;
+      padding: 0.4rem 0.8rem;
+      border-radius: 9999px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s ease;
+    }
+    .mode-btn.active-fast {
+      background: rgba(0, 242, 254, 0.15);
+      border-color: rgba(0, 242, 254, 0.5);
+      color: var(--cyan);
+      box-shadow: 0 0 12px rgba(0, 242, 254, 0.4);
+    }
+    .mode-btn.active-slow {
+      background: rgba(217, 70, 239, 0.15);
+      border-color: rgba(217, 70, 239, 0.5);
+      color: var(--violet);
+      box-shadow: 0 0 12px rgba(217, 70, 239, 0.4);
+    }
+    .brand-title {
+      font-size: 1.75rem;
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      text-align: center;
+    }
+    .brand-title span {
+      background: linear-gradient(135deg, var(--cyan), var(--violet));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .brand-subtitle {
+      font-family: ui-monospace, monospace;
+      font-size: 0.8rem;
+      color: #64748b;
+      letter-spacing: 0.2em;
+      text-align: center;
+      margin-top: -1rem;
+    }
+    .instructions {
+      position: absolute;
+      bottom: 1.5rem;
+      font-size: 0.75rem;
+      color: #475569;
+      font-family: ui-monospace, monospace;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="brand-title">OPEN<span>TALON</span> 3D CORE</div>
+    <div class="brand-subtitle">DUAL-BRAIN AUTONOMOUS AGENT ENGINE</div>
+
+    <!-- 3D Interactive Canvas -->
+    <canvas id="talonCanvas" width="960" height="960"></canvas>
+
+    <!-- Interactive HUD Controls -->
+    <div class="hud">
+      <span style="color: #64748b; font-family: ui-monospace, monospace;">PULSE STATE:</span>
+      <button id="btnDual" class="mode-btn active-fast" onclick="setMode('dual')">Dual-Brain Sync</button>
+      <button id="btnFast" class="mode-btn" onclick="setMode('fast')">Fast Path Burst</button>
+      <button id="btnSlow" class="mode-btn" onclick="setMode('slow')">Slow Path Reflection</button>
+    </div>
+  </div>
+
+  <div class="instructions">DRAG TO ROTATE 3D • MOUSE OVER TO TILT • REAL-TIME 60FPS VOLUMETRIC SHADING</div>
+
+  <script>
+    const canvas = document.getElementById('talonCanvas');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;
+    const H = canvas.height;
+    const CX = W / 2;
+    const CY = H / 2;
+
+    let rotX = -0.2;
+    let rotY = 0.4;
+    let targetRotX = -0.2;
+    let targetRotY = 0.4;
+    let isDragging = false;
+    let lastMouseX = 0;
+    let lastMouseY = 0;
+    let mode = 'dual'; // 'dual' | 'fast' | 'slow'
+    let pulseTime = 0;
+
+    // Particles system
+    const particles = [];
+    for (let i = 0; i < 75; i++) {
+      particles.push({
+        theta: Math.random() * Math.PI * 2,
+        phi: Math.acos((Math.random() * 2) - 1),
+        dist: 170 + Math.random() * 90,
+        speed: 0.01 + Math.random() * 0.02,
+        size: 1.5 + Math.random() * 2.5,
+        type: Math.random() > 0.5 ? 'cyan' : 'violet'
+      });
+    }
+
+    // 3D Claw Vertex Nodes
+    const clawSegments = [
+      // Top Mandible Claws (3 joints per claw)
+      { baseAngle: 0, length: 180, curvature: 0.7, color: '#38bdf8' },
+      { baseAngle: (Math.PI * 2) / 3, length: 170, curvature: 0.65, color: '#00f2fe' },
+      { baseAngle: (Math.PI * 4) / 3, length: 170, curvature: 0.65, color: '#d946ef' },
+      // Rear stabilizing talons
+      { baseAngle: (Math.PI / 3), length: 140, curvature: 0.5, color: '#818cf8' },
+      { baseAngle: (Math.PI * 5) / 3, length: 140, curvature: 0.5, color: '#c084fc' }
+    ];
+
+    function project3D(x, y, z) {
+      // Rotate Y
+      const cosY = Math.cos(rotY);
+      const sinY = Math.sin(rotY);
+      const x1 = x * cosY - z * sinY;
+      const z1 = z * cosY + x * sinY;
+
+      // Rotate X
+      const cosX = Math.cos(rotX);
+      const sinX = Math.sin(rotX);
+      const y2 = y * cosX - z1 * sinX;
+      const z2 = z1 * cosX + y * sinX;
+
+      // Perspective projection
+      const fov = 750;
+      const scale = fov / (fov + z2 + 250);
+      return {
+        x: CX + x1 * scale,
+        y: CY + y2 * scale,
+        scale: scale,
+        z: z2
+      };
+    }
+
+    function render() {
+      pulseTime += 0.035;
+
+      // Auto slow rotation if not dragging
+      if (!isDragging) {
+        targetRotY += 0.008;
+      }
+      rotX += (targetRotX - rotX) * 0.08;
+      rotY += (targetRotY - rotY) * 0.08;
+
+      ctx.clearRect(0, 0, W, H);
+
+      // 1. Ambient Background Glow
+      const bgGrad = ctx.createRadialGradient(CX, CY, 40, CX, CY, 380);
+      if (mode === 'fast') {
+        bgGrad.addColorStop(0, 'rgba(0, 242, 254, 0.18)');
+      } else if (mode === 'slow') {
+        bgGrad.addColorStop(0, 'rgba(217, 70, 239, 0.18)');
+      } else {
+        bgGrad.addColorStop(0, 'rgba(30, 41, 59, 0.25)');
+      }
+      bgGrad.addColorStop(1, 'rgba(7, 9, 14, 0)');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, W, H);
+
+      // 2. Draw 3D Orbiting Quantum Rings
+      drawRing(190, 60, Math.sin(pulseTime * 0.5) * 0.3, '#00f2fe', [14, 8]);
+      drawRing(210, 70, -Math.cos(pulseTime * 0.4) * 0.4, '#d946ef', [18, 10]);
+
+      // 3. Draw Orbiting Swarm Particles
+      for (const p of particles) {
+        p.theta += p.speed;
+        const px = p.dist * Math.sin(p.phi) * Math.cos(p.theta);
+        const py = p.dist * Math.cos(p.phi);
+        const pz = p.dist * Math.sin(p.phi) * Math.sin(p.theta);
+
+        const proj = project3D(px, py, pz);
+        if (proj.scale > 0) {
+          ctx.beginPath();
+          ctx.arc(proj.x, proj.y, p.size * proj.scale, 0, Math.PI * 2);
+          ctx.fillStyle = p.type === 'cyan' ? 'rgba(0, 242, 254, 0.85)' : 'rgba(217, 70, 239, 0.85)';
+          ctx.shadowBlur = 10 * proj.scale;
+          ctx.shadowColor = p.type === 'cyan' ? '#00f2fe' : '#d946ef';
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+      }
+
+      // 4. Central Dual-Brain Quantum Energy Sphere
+      const sphereProj = project3D(0, 0, 0);
+      const sphereRadius = 95 * (1 + Math.sin(pulseTime * 2) * 0.04) * sphereProj.scale;
+
+      // Fast Path Left Hemisphere
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(sphereProj.x, sphereProj.y, sphereRadius, Math.PI * 0.5, Math.PI * 1.5);
+      const fastGrad = ctx.createRadialGradient(
+        sphereProj.x - 20 * sphereProj.scale,
+        sphereProj.y - 15 * sphereProj.scale,
+        10,
+        sphereProj.x,
+        sphereProj.y,
+        sphereRadius
+      );
+      fastGrad.addColorStop(0, '#ffffff');
+      fastGrad.addColorStop(0.3, '#00f2fe');
+      fastGrad.addColorStop(1, '#0052cc');
+      ctx.fillStyle = fastGrad;
+      ctx.shadowBlur = 35 * sphereProj.scale;
+      ctx.shadowColor = '#00f2fe';
+      ctx.fill();
+      ctx.restore();
+
+      // Slow Path Right Hemisphere
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(sphereProj.x, sphereProj.y, sphereRadius, Math.PI * 1.5, Math.PI * 0.5);
+      const slowGrad = ctx.createRadialGradient(
+        sphereProj.x + 20 * sphereProj.scale,
+        sphereProj.y - 15 * sphereProj.scale,
+        10,
+        sphereProj.x,
+        sphereProj.y,
+        sphereRadius
+      );
+      slowGrad.addColorStop(0, '#ffffff');
+      slowGrad.addColorStop(0.3, '#d946ef');
+      slowGrad.addColorStop(1, '#7928ca');
+      ctx.fillStyle = slowGrad;
+      ctx.shadowBlur = 35 * sphereProj.scale;
+      ctx.shadowColor = '#d946ef';
+      ctx.fill();
+      ctx.restore();
+
+      // Central Quantum Core Node
+      ctx.beginPath();
+      ctx.arc(sphereProj.x, sphereProj.y, 22 * sphereProj.scale, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowBlur = 25 * sphereProj.scale;
+      ctx.shadowColor = '#ffffff';
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // 5. Draw 3D Cybernetic Talon Claws
+      for (const claw of clawSegments) {
+        draw3DClaw(claw, pulseTime);
+      }
+
+      requestAnimationFrame(render);
+    }
+
+    function drawRing(rx, ry, tilt, color, dash) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash(dash);
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = color;
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = color;
+
+      for (let a = 0; a <= Math.PI * 2; a += 0.1) {
+        const x = rx * Math.cos(a);
+        const y = ry * Math.sin(a) * Math.cos(tilt) - rx * Math.sin(a) * Math.sin(tilt);
+        const z = ry * Math.sin(a) * Math.sin(tilt) + rx * Math.cos(a) * Math.cos(tilt);
+        const p = project3D(x, y, z);
+        if (a === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function draw3DClaw(claw, time) {
+      const segments = 4;
+      const baseDist = 125;
+      const angle = claw.baseAngle + Math.sin(time * 0.8) * 0.05;
+
+      const pts = [];
+      for (let s = 0; s <= segments; s++) {
+        const ratio = s / segments;
+        const r = baseDist + ratio * 85;
+        const theta = angle + ratio * claw.curvature;
+        const x = r * Math.cos(theta);
+        const y = -140 + ratio * 160;
+        const z = r * Math.sin(theta);
+        pts.push(project3D(x, y, z));
+      }
+
+      // Draw metallic claw facet lines
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) {
+        ctx.lineTo(pts[i].x, pts[i].y);
+      }
+      ctx.lineWidth = 14 * pts[0].scale;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#1e293b';
+      ctx.stroke();
+
+      // Metallic highlight bevel
+      ctx.lineWidth = 6 * pts[0].scale;
+      ctx.strokeStyle = '#475569';
+      ctx.stroke();
+
+      // Sharp Talon Tip Neon Energy Arc
+      const tip = pts[pts.length - 1];
+      ctx.beginPath();
+      ctx.arc(tip.x, tip.y, 7 * tip.scale, 0, Math.PI * 2);
+      ctx.fillStyle = claw.color;
+      ctx.shadowBlur = 18 * tip.scale;
+      ctx.shadowColor = claw.color;
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Mouse & Touch Interaction
+    window.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+        const deltaX = e.clientX - lastMouseX;
+        const deltaY = e.clientY - lastMouseY;
+        targetRotY += deltaX * 0.008;
+        targetRotX += deltaY * 0.008;
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+      } else {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - (rect.left + rect.width / 2);
+        const my = e.clientY - (rect.top + rect.height / 2);
+        targetRotY = 0.4 + (mx / rect.width) * 0.4;
+        targetRotX = -0.2 + (my / rect.height) * 0.4;
+      }
+    });
+
+    window.addEventListener('mouseup', () => { isDragging = false; });
+
+    // Touch events for mobile
+    canvas.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        isDragging = true;
+        lastMouseX = e.touches[0].clientX;
+        lastMouseY = e.touches[0].clientY;
+      }
+    });
+    window.addEventListener('touchmove', (e) => {
+      if (isDragging && e.touches.length === 1) {
+        const deltaX = e.touches[0].clientX - lastMouseX;
+        const deltaY = e.touches[0].clientY - lastMouseY;
+        targetRotY += deltaX * 0.01;
+        targetRotX += deltaY * 0.01;
+        lastMouseX = e.touches[0].clientX;
+        lastMouseY = e.touches[0].clientY;
+      }
+    });
+    window.addEventListener('touchend', () => { isDragging = false; });
+
+    function setMode(newMode) {
+      mode = newMode;
+      document.getElementById('btnDual').className = 'mode-btn' + (mode === 'dual' ? ' active-fast' : '');
+      document.getElementById('btnFast').className = 'mode-btn' + (mode === 'fast' ? ' active-fast' : '');
+      document.getElementById('btnSlow').className = 'mode-btn' + (mode === 'slow' ? ' active-slow' : '');
+    }
+
+    render();
+  </script>
+</body>
+</html>

@@ -297,7 +297,22 @@ export function getDashboardHtml(): string {
 
   <header>
     <div class="brand">
-      <span>🦅 OpenTalon</span>
+      <svg viewBox="0 0 512 512" width="34" height="34" style="filter: drop-shadow(0 0 8px rgba(0, 242, 254, 0.7)); flex-shrink: 0;">
+        <defs>
+          <linearGradient id="hbFast" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00f2fe"/><stop offset="100%" stop-color="#0072ff"/></linearGradient>
+          <linearGradient id="hbSlow" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#d946ef"/><stop offset="100%" stop-color="#8b5cf6"/></linearGradient>
+          <linearGradient id="hbClaw" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#475569"/><stop offset="100%" stop-color="#0f172a"/></linearGradient>
+        </defs>
+        <ellipse cx="256" cy="256" rx="140" ry="50" fill="none" stroke="url(#hbFast)" stroke-width="8" stroke-dasharray="24 16" transform="rotate(-25 256 256)"/>
+        <ellipse cx="256" cy="256" rx="140" ry="50" fill="none" stroke="url(#hbSlow)" stroke-width="8" stroke-dasharray="24 16" transform="rotate(35 256 256)"/>
+        <path d="M 256,180 A 76,76 0 0,0 256,332 Z" fill="url(#hbFast)"/>
+        <path d="M 256,180 A 76,76 0 0,1 256,332 Z" fill="url(#hbSlow)"/>
+        <circle cx="256" cy="256" r="28" fill="#ffffff"/>
+        <path d="M 230,70 L 256,110 L 282,70 L 275,130 L 256,180 L 237,130 Z" fill="url(#hbClaw)" stroke="#38bdf8" stroke-width="4"/>
+        <g transform="rotate(-40 256 256)"><path d="M 235,90 L 256,130 L 277,95 L 268,150 L 256,195 L 244,150 Z" fill="url(#hbClaw)" stroke="#00f2fe" stroke-width="4"/></g>
+        <g transform="rotate(40 256 256)"><path d="M 235,90 L 256,130 L 277,95 L 268,150 L 256,195 L 244,150 Z" fill="url(#hbClaw)" stroke="#d946ef" stroke-width="4"/></g>
+      </svg>
+      <span>Open<span style="color: #00f2fe;">Talon</span></span>
       <span class="brand-badge">Dual-Brain Engine</span>
     </div>
     <nav>
@@ -311,6 +326,32 @@ export function getDashboardHtml(): string {
   <main>
     <!-- TAB 1: OVERVIEW -->
     <section id="overview" class="tab-content active">
+      <!-- 3D DYNAMIC DUAL-BRAIN HOLOGRAPHIC HERO WIDGET -->
+      <div style="background: radial-gradient(circle at 85% 50%, rgba(0, 242, 254, 0.12), transparent 50%), radial-gradient(circle at 15% 50%, rgba(217, 70, 239, 0.12), transparent 50%), #0e1422; border: 1px solid var(--card-border); border-radius: 16px; padding: 1.5rem 2rem; margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.5rem; position: relative; overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);">
+        <div style="flex: 1; min-width: 300px;">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 10px #10b981;"></span>
+            <span style="font-family: var(--font-mono); font-size: 0.75rem; color: #10b981; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;">Zero-Trust Dual-Brain Core Online</span>
+          </div>
+          <h2 style="font-size: 1.75rem; font-weight: 900; letter-spacing: -0.03em; margin-bottom: 0.5rem;">
+            Autonomous Cognitive Architecture
+          </h2>
+          <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; max-width: 600px;">
+            OpenTalon synergizes <strong style="color: #00f2fe;">Fast Path</strong> low-latency token frugality (&lt;1,500 tokens/turn) with an asynchronous <strong style="color: #d946ef;">Slow Path</strong> evolutionary reflection engine governed by a sandboxed capability matrix.
+          </p>
+          <div style="display: flex; gap: 0.75rem; margin-top: 1.25rem;">
+            <span style="background: rgba(0, 242, 254, 0.1); border: 1px solid rgba(0, 242, 254, 0.3); color: #00f2fe; padding: 0.3rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-family: var(--font-mono); font-weight: 600;">⚡ Fast Path: &lt;500ms</span>
+            <span style="background: rgba(217, 70, 239, 0.1); border: 1px solid rgba(217, 70, 239, 0.3); color: #d946ef; padding: 0.3rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-family: var(--font-mono); font-weight: 600;">🧠 Slow Path: Closed-Loop</span>
+            <span style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); color: #10b981; padding: 0.3rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-family: var(--font-mono); font-weight: 600;">🛡️ Sandbox: Strict Isolate</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+          <canvas id="talon3DHeroCanvas" width="280" height="280" style="width: 140px; height: 140px; border-radius: 50%; background: #070a12; border: 1px solid #1e293b; box-shadow: 0 0 30px rgba(0, 242, 254, 0.25); cursor: pointer;" title="Dynamic 3D OpenTalon Core — Interactive Orbit"></canvas>
+          <span style="font-size: 0.7rem; font-family: var(--font-mono); color: var(--text-muted); margin-top: 0.5rem;">Live 3D Telemetry Core</span>
+        </div>
+      </div>
+
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-label">Fast Path Budget</div>
@@ -613,8 +654,73 @@ export function getDashboardHtml(): string {
       return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
+    // 3D Talon Core Mini Hologram
+    function init3DHero() {
+      const cvs = document.getElementById('talon3DHeroCanvas');
+      if (!cvs) return;
+      const c = cvs.getContext('2d');
+      const w = cvs.width, h = cvs.height, cx = w/2, cy = h/2;
+      let angle = 0;
+
+      function draw3D() {
+        angle += 0.025;
+        c.clearRect(0, 0, w, h);
+
+        // Core Quantum Glow
+        const rad = 42 + Math.sin(angle * 2.5) * 2;
+        // Fast path left
+        c.beginPath();
+        c.arc(cx, cy, rad, Math.PI * 0.5, Math.PI * 1.5);
+        c.fillStyle = '#00f2fe';
+        c.shadowBlur = 18;
+        c.shadowColor = '#00f2fe';
+        c.fill();
+
+        // Slow path right
+        c.beginPath();
+        c.arc(cx, cy, rad, Math.PI * 1.5, Math.PI * 0.5);
+        c.fillStyle = '#d946ef';
+        c.shadowBlur = 18;
+        c.shadowColor = '#d946ef';
+        c.fill();
+        c.shadowBlur = 0;
+
+        // Center white node
+        c.beginPath();
+        c.arc(cx, cy, 12, 0, Math.PI * 2);
+        c.fillStyle = '#ffffff';
+        c.fill();
+
+        // Orbiting Claws
+        for (let i = 0; i < 3; i++) {
+          const a = angle + (i * Math.PI * 2) / 3;
+          const x = cx + Math.cos(a) * 78;
+          const y = cy + Math.sin(a) * 32;
+          c.beginPath();
+          c.arc(x, y, 5, 0, Math.PI * 2);
+          c.fillStyle = i % 2 === 0 ? '#38bdf8' : '#c084fc';
+          c.shadowBlur = 10;
+          c.shadowColor = c.fillStyle;
+          c.fill();
+          c.shadowBlur = 0;
+
+          // Talon link
+          c.beginPath();
+          c.moveTo(cx, cy);
+          c.lineTo(x, y);
+          c.strokeStyle = 'rgba(71, 85, 105, 0.4)';
+          c.lineWidth = 2;
+          c.stroke();
+        }
+
+        requestAnimationFrame(draw3D);
+      }
+      draw3D();
+    }
+
     // Auto-load on startup
     loadStats();
+    init3DHero();
   </script>
 </body>
 </html>

@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Vignette -->
+    <radialGradient id="bgGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#141c2e" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#070a10" stop-opacity="1"/>
+    </radialGradient>
+
+    <!-- Fast Path Cyan Gradient -->
+    <linearGradient id="fastPathGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe"/>
+      <stop offset="100%" stop-color="#0072ff"/>
+    </linearGradient>
+
+    <!-- Slow Path Violet Gradient -->
+    <linearGradient id="slowPathGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d946ef"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+
+    <!-- Metallic Titanium Claws -->
+    <linearGradient id="metalDark" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#334155"/>
+      <stop offset="50%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+
+    <linearGradient id="metalFacet" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#64748b"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+
+    <!-- Neon Glow Filter -->
+    <filter id="neonGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur1"/>
+      <feGaussianBlur stdDeviation="20" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <style>
+      @keyframes spin3DClockwise {
+        0% { transform: rotate3d(1, 0.4, 0.2, 0deg); }
+        100% { transform: rotate3d(1, 0.4, 0.2, 360deg); }
+      }
+      @keyframes spin3DCounter {
+        0% { transform: rotate3d(0.3, 1, 0.5, 360deg); }
+        100% { transform: rotate3d(0.3, 1, 0.5, 0deg); }
+      }
+      @keyframes corePulse {
+        0%, 100% { transform: scale(0.96); opacity: 0.9; }
+        50% { transform: scale(1.04); opacity: 1; filter: drop-shadow(0 0 25px rgba(0, 242, 254, 0.8)); }
+      }
+      @keyframes clawFloat {
+        0%, 100% { transform: translateY(0px) rotate(0deg); }
+        50% { transform: translateY(-3px) rotate(0.5deg); }
+      }
+      .anim-ring-1 { transform-origin: 256px 256px; animation: spin3DClockwise 12s linear infinite; }
+      .anim-ring-2 { transform-origin: 256px 256px; animation: spin3DCounter 16s linear infinite; }
+      .anim-core { transform-origin: 256px 256px; animation: corePulse 3s ease-in-out infinite; }
+      .anim-claws { transform-origin: 256px 256px; animation: clawFloat 4s ease-in-out infinite; }
+    </style>
+  </defs>
+
+  <!-- Background Base Canvas -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGlow)"/>
+  <rect width="510" height="510" x="1" y="1" rx="127" fill="none" stroke="#1e293b" stroke-width="2"/>
+
+  <!-- Orbital Cybernetic Ring 1 (Slow Path Outer Orbit) -->
+  <g class="anim-ring-1">
+    <ellipse cx="256" cy="256" rx="150" ry="60" fill="none" stroke="url(#slowPathGrad)" stroke-width="2.5" stroke-dasharray="14 10" opacity="0.75" filter="url(#neonGlow)"/>
+    <circle cx="406" cy="256" r="4" fill="#d946ef" filter="url(#neonGlow)"/>
+    <circle cx="106" cy="256" r="3" fill="#8b5cf6"/>
+  </g>
+
+  <!-- Orbital Cybernetic Ring 2 (Fast Path Inclined Orbit) -->
+  <g class="anim-ring-2">
+    <ellipse cx="256" cy="256" rx="140" ry="50" fill="none" stroke="url(#fastPathGrad)" stroke-width="2.5" stroke-dasharray="18 8" opacity="0.85" filter="url(#neonGlow)"/>
+    <circle cx="256" cy="206" r="4.5" fill="#00f2fe" filter="url(#neonGlow)"/>
+    <circle cx="256" cy="306" r="3" fill="#0072ff"/>
+  </g>
+
+  <!-- Dual-Brain Quantum Energy Sphere -->
+  <g class="anim-core">
+    <!-- Fast Path Left Hemisphere -->
+    <path d="M 256,180 A 76,76 0 0,0 256,332 Z" fill="url(#fastPathGrad)" opacity="0.85" filter="url(#neonGlow)"/>
+    <!-- Slow Path Right Hemisphere -->
+    <path d="M 256,180 A 76,76 0 0,1 256,332 Z" fill="url(#slowPathGrad)" opacity="0.85" filter="url(#neonGlow)"/>
+    <!-- Central Plasma Singularity -->
+    <circle cx="256" cy="256" r="32" fill="#ffffff" opacity="0.95" filter="url(#neonGlow)"/>
+    <circle cx="256" cy="256" r="16" fill="#e0f2fe"/>
+    <line x1="256" y1="180" x2="256" y2="332" stroke="#ffffff" stroke-width="2" opacity="0.7"/>
+  </g>
+
+  <!-- 3D Robotic Eagle Talon (Claws Gripping Sphere) -->
+  <g class="anim-claws">
+    <!-- Primary Upper Claw / Mandible -->
+    <path d="M 230,70 L 256,105 L 282,70 L 275,120 L 256,175 L 237,120 Z" fill="url(#metalDark)" stroke="#475569" stroke-width="1.5"/>
+    <path d="M 256,105 L 282,70 L 275,120 L 256,175 Z" fill="url(#metalFacet)"/>
+    <polygon points="256,175 258,190 254,190" fill="#00f2fe" filter="url(#neonGlow)"/>
+
+    <!-- Left Talon Claw (Fast Path Grip) -->
+    <g transform="rotate(-38 256 256)">
+      <path d="M 235,90 L 256,125 L 277,95 L 268,145 L 256,192 L 244,145 Z" fill="url(#metalDark)" stroke="#38bdf8" stroke-width="1.5"/>
+      <path d="M 256,125 L 277,95 L 268,145 L 256,192 Z" fill="url(#metalFacet)"/>
+      <!-- Glowing Bevel Joint -->
+      <circle cx="256" cy="125" r="5" fill="#0f172a" stroke="#00f2fe" stroke-width="2"/>
+      <!-- Sharp Talon Tip Arc -->
+      <path d="M 256,192 Q 248,220 230,230 Q 245,212 256,192 Z" fill="#00f2fe" filter="url(#neonGlow)"/>
+    </g>
+
+    <!-- Right Talon Claw (Slow Path Grip) -->
+    <g transform="rotate(38 256 256)">
+      <path d="M 235,90 L 256,125 L 277,95 L 268,145 L 256,192 L 244,145 Z" fill="url(#metalDark)" stroke="#c084fc" stroke-width="1.5"/>
+      <path d="M 256,125 L 277,95 L 268,145 L 256,192 Z" fill="url(#metalFacet)"/>
+      <!-- Glowing Bevel Joint -->
+      <circle cx="256" cy="125" r="5" fill="#0f172a" stroke="#d946ef" stroke-width="2"/>
+      <!-- Sharp Talon Tip Arc -->
+      <path d="M 256,192 Q 264,220 282,230 Q 267,212 256,192 Z" fill="#d946ef" filter="url(#neonGlow)"/>
+    </g>
+
+    <!-- Bottom Grasping Rear Talons -->
+    <g transform="rotate(145 256 256)">
+      <path d="M 242,110 L 256,140 L 270,115 L 262,155 L 256,195 L 250,155 Z" fill="url(#metalDark)" stroke="#475569" stroke-width="1"/>
+      <path d="M 256,195 Q 248,215 238,222 Q 250,210 256,195 Z" fill="#38bdf8"/>
+    </g>
+    <g transform="rotate(-145 256 256)">
+      <path d="M 242,110 L 256,140 L 270,115 L 262,155 L 256,195 L 250,155 Z" fill="url(#metalDark)" stroke="#475569" stroke-width="1"/>
+      <path d="M 256,195 Q 264,215 274,222 Q 262,210 256,195 Z" fill="#c084fc"/>
+    </g>
+  </g>
+
+  <!-- High-Tech Circuitry Node Accents -->
+  <g opacity="0.65">
+    <circle cx="120" cy="120" r="3" fill="#00f2fe"/>
+    <line x1="120" y1="120" x2="150" y2="120" stroke="#00f2fe" stroke-width="1"/>
+    <circle cx="392" cy="120" r="3" fill="#d946ef"/>
+    <line x1="392" y1="120" x2="362" y2="120" stroke="#d946ef" stroke-width="1"/>
+    <circle cx="256" cy="450" r="3" fill="#38bdf8"/>
+    <line x1="256" y1="450" x2="256" y2="430" stroke="#38bdf8" stroke-width="1"/>
+  </g>
+</svg>
