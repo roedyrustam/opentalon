@@ -37,4 +37,15 @@
   6. **MCP Tool Bridge**: Seamless discovery of remote MCP tools via `McpClientAdapter` and automatic synthesis into sandboxed procedural skills via `McpToolBridge`.
   7. **Adaptive Tool Self-Healing**: Automated single repair pass in Fast Path when a sandboxed tool throws parameter or runtime errors.
   8. **Production Skills Gallery (10 Skills)**: Complete, production-grade skills with zero-trust capability matrices and verified test cases.
-  9. **Test Hygiene**: 68/68 tests passing across all 11 test suites with 0 regressions. Full monorepo build passing.
+  9. **Interactive REPL Chat & Slash Commands**:
+     - `talon chat` & `talon run` (without prompt) launches an interactive multi-turn REPL maintaining contextual state.
+     - Integrated slash commands: `/help`, `/skills`, `/facts`, `/stats`, `/evolve`, `/history`, `/reset`, `/clear`, `/quit`.
+  10. **CLI Ergonomics & Machine JSON Streaming**:
+     - `skills run <skillName> [argsJson...]` and `mcp call <toolName> [argsJson...]` support variadic arguments and automatic single/double-quote parsing in PowerShell.
+     - `talon run --json` sanitizes retrieved procedural skill embeddings, outputting clean JSON suitable for automated CI/CD pipelines.
+     - `talon run --stream` features typewriter token streaming.
+  11. **Developer Documentation**: Complete 23-command CLI manual, architecture diagrams, capability matrix, and API contracts codified in `DOCUMENTATION.md`.
+  12. **Global CLI Executable Linking**:
+     - Linked globally via `npm link` so `talon` command works out of the box in PowerShell, Command Prompt, and bash from any directory.
+     - Added native Windows wrappers `talon.cmd` and `talon.ps1` in repository root.
+  13. **Test Hygiene**: 68/68 tests passing across all 11 test suites with 0 regressions. Full monorepo build passing. Local daemon active on `http://127.0.0.1:3100`.

@@ -119,28 +119,51 @@ program
   });
 
 // Interactive REPL chat session handler
-function startInteractiveChat() {
-  const { router } = getComponents();
+async function startInteractiveChat() {
+  const { router, memory, evolutionEngine, llm } = getComponents();
+  await memory.initialize();
+
   const sessionId = `repl_${Date.now()}`;
   const history: ChatMessage[] = [];
 
-  console.log('╔═══════════════════════════════════════════════════════════╗');
-  console.log('║       OpenTalon Interactive REPL (Dual-Brain Agent)       ║');
-  console.log('║  Type your prompt below. Type "exit" or "quit" to leave.  ║');
-  console.log('╚═══════════════════════════════════════════════════════════╝\n');
+  const cyan = '\x1b[36m';
+  const green = '\x1b[32m';
+  const yellow = '\x1b[33m';
+  const magenta = '\x1b[35m';
+  const bold = '\x1b[1m';
+  const dim = '\x1b[2m';
+  const reset = '\x1b[0m';
+
+  const providerName = (llm as any).provider || (llm.constructor ? llm.constructor.name.replace('Driver', '') : 'Unknown');
+  const modelName = (llm as any).primaryModel || (llm as any).model || 'default';
+
+  console.log(`
+${cyan}╔══════════════════════════════════════════════════════════════════╗
+║        🦅  OPENTALON INTERACTIVE REPL (DUAL-BRAIN)               ║
+║  Dual-Brain Autonomous AI Agent Framework (v0.1.0)               ║
+╠══════════════════════════════════════════════════════════════════╣${reset}
+║  • LLM Provider : ${green}${providerName}${reset} (${modelName})
+║  • Token Budget : <1,500 tokens / turn                           ║
+║  • Slash Cmds   : Type ${yellow}/help${reset} for available commands             ║
+║  • Exit         : Type ${dim}/exit${reset} or ${dim}exit${reset} to leave session                 ║
+${cyan}╚══════════════════════════════════════════════════════════════════╝${reset}
+`);
 
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: 'talon> ',
+    prompt: `${cyan}talon>${reset} `,
   });
 
   rl.prompt();
 
   rl.on('line', async (line) => {
     const trimmed = line.trim();
-    if (trimmed === 'exit' || trimmed === 'quit') {
-      console.log('👋 Session ended. Goodbye!');
+
+    // 1. Exit handling
+    if (trimmed === 'exit' || trimmed === 'quit' || trimmed === '/exit' || trimmed === '/quit') {
+      console.log(`\n${green}👋 Session ended. Goodbye!${reset}`);
+      await memory.close();
       process.exit(0);
     }
 
@@ -149,6 +172,220 @@ function startInteractiveChat() {
       return;
     }
 
+    // 2. Slash command handling
+    if (trimmed.startsWith('/')) {
+      const parts = trimmed.slice(1).split(/\s+/);
+      const cmd = parts[0]?.toLowerCase();
+      const rest = parts.slice(1).join(' ').trim();
+
+      if (cmd === 'help' || cmd === '?') {
+        console.log(`
+${bold}OpenTalon REPL Slash Commands:${reset}
+  ${yellow}/help, /?${reset}               Show this commands guide
+  ${yellow}/skills${reset}                 List all active procedural skills in sandbox
+  ${yellow}/facts${reset}                  List long-term semantic facts & user preferences
+  ${yellow}/addfact <key>=<val>${reset}   Store a new semantic rule or preference
+  ${yellow}/delfact <id>${reset}          Delete a semantic fact by ID
+  ${yellow}/stats${reset}                  Show runtime telemetry, latency & token stats
+  ${yellow}/model${reset}                  Display active LLM provider and model configuration
+  ${yellow}/evolve${reset}                 Trigger on-demand Slow Path evolution cycle
+  ${yellow}/history${reset}                View conversation turns in current session
+  ${yellow}/reset${reset}                  Clear current conversation history
+  ${yellow}/clear${reset}                  Clear terminal screen
+  ${yellow}/exit, /quit${reset}            Exit OpenTalon REPL
+`);
+        rl.prompt();
+        return;
+      }
+
+      if (cmd === 'skills') {
+        try {
+          const skills = await memory.listSkills();
+          console.log(`\n${bold}📚 Registered Procedural Skills (${skills.length}):${reset}`);
+          if (skills.length === 0) {
+            console.log(`  ${dim}No skills registered in database.${reset}`);
+          } else {
+            for (const s of skills) {
+              console.log(`  • ${green}${s.name}${reset} (v${s.version}) [Hash: ${s.hash.slice(0, 8)}]`);
+              console.log(`    ${dim}${s.description}${reset}`);
+            }
+          }
+          console.log('');
+        } catch (err: unknown) {
+          console.error(`❌ Failed to list skills:`, err instanceof Error ? err.message : String(err));
+        }
+        rl.prompt();
+        return;
+      }
+
+      if (cmd === 'facts') {
+        try {
+          const facts = await memory.listFacts({ limit: 50 });
+          console.log(`\n${bold}🧠 Long-Term Semantic Facts (${facts.length}):${reset}`);
+          if (facts.length === 0) {
+            console.log(`  ${dim}No semantic facts stored yet. Use /addfact <key>=<value> to save one.${reset}`);
+          } else {
+            for (const f of facts) {
+              console.log(`  • [${magenta}${f.category}${reset}] ${bold}${f.key}${reset}: ${f.value} ${dim}(ID: ${f.id})${reset}`);
+            }
+          }
+          console.log('');
+        } catch (err: unknown) {
+          console.error(`❌ Failed to list facts:`, err instanceof Error ? err.message : String(err));
+        }
+        rl.prompt();
+        return;
+      }
+
+      if (cmd === 'addfact') {
+        if (!rest) {
+          console.log(`${yellow}Usage: /addfact <key> = <value>${reset} (e.g. /addfact preferred_currency = EUR)`);
+          rl.prompt();
+          return;
+        }
+        let key = '';
+        let val = '';
+        if (rest.includes('=')) {
+          const idx = rest.indexOf('=');
+          key = rest.slice(0, idx).trim();
+          val = rest.slice(idx + 1).trim();
+        } else {
+          const spaceIdx = rest.indexOf(' ');
+          if (spaceIdx !== -1) {
+            key = rest.slice(0, spaceIdx).trim();
+            val = rest.slice(spaceIdx + 1).trim();
+          } else {
+            key = rest;
+            val = 'true';
+          }
+        }
+
+        try {
+          const fact = {
+            id: `fact_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            category: 'user_preference',
+            key,
+            value: val,
+            confidence: 1.0,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          };
+          await memory.saveFact(fact);
+          console.log(`✨ ${green}Saved semantic fact:${reset} "${key}" = "${val}" ${dim}(ID: ${fact.id})${reset}`);
+        } catch (err: unknown) {
+          console.error(`❌ Failed to save fact:`, err instanceof Error ? err.message : String(err));
+        }
+        rl.prompt();
+        return;
+      }
+
+      if (cmd === 'delfact') {
+        if (!rest) {
+          console.log(`${yellow}Usage: /delfact <fact_id>${reset}`);
+          rl.prompt();
+          return;
+        }
+        try {
+          const deleted = await memory.deleteFact(rest);
+          if (deleted) {
+            console.log(`🗑️ ${green}Deleted semantic fact:${reset} ${rest}`);
+          } else {
+            console.log(`⚠️ Fact not found: ${rest}`);
+          }
+        } catch (err: unknown) {
+          console.error(`❌ Failed to delete fact:`, err instanceof Error ? err.message : String(err));
+        }
+        rl.prompt();
+        return;
+      }
+
+      if (cmd === 'stats') {
+        try {
+          const skills = await memory.listSkills();
+          const traces = await memory.getRecentTraces(100);
+          const facts = await memory.listFacts({ limit: 1000 });
+          const avgLatency = traces.length > 0 ? Math.round(traces.reduce((a, t) => a + t.latencyMs, 0) / traces.length) : 0;
+          const totalTokens = traces.reduce((a, t) => a + (t.tokensUsed?.totalTokens || 0), 0);
+
+          console.log(`\n${bold}📊 System Telemetry & Statistics:${reset}`);
+          console.log(`  • Registered Skills  : ${green}${skills.length}${reset}`);
+          console.log(`  • Semantic Facts     : ${cyan}${facts.length}${reset}`);
+          console.log(`  • Episodic Traces    : ${yellow}${traces.length}${reset}`);
+          console.log(`  • Avg Latency (100)  : ${magenta}${avgLatency}ms${reset}`);
+          console.log(`  • Total Tokens Logged: ${totalTokens}`);
+          console.log('');
+        } catch (err: unknown) {
+          console.error(`❌ Failed to fetch stats:`, err instanceof Error ? err.message : String(err));
+        }
+        rl.prompt();
+        return;
+      }
+
+      if (cmd === 'model') {
+        console.log(`\n${bold}🤖 Active LLM Configuration:${reset}`);
+        console.log(`  • Provider       : ${cyan}${providerName}${reset}`);
+        console.log(`  • Primary Model  : ${green}${modelName}${reset}`);
+        console.log(`  • Fallback Model : ${(llm as any).fallbackModel || 'none'}`);
+        console.log(`  • Token Budget   : <1,500 tokens / turn`);
+        console.log(`  • Embedding Model: ${process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001'}\n`);
+        rl.prompt();
+        return;
+      }
+
+      if (cmd === 'evolve') {
+        console.log(`\n🧠 Running on-demand Slow Path Evolution cycle...`);
+        const start = Date.now();
+        try {
+          const report = await evolutionEngine.runEvolutionCycle({ traceLimit: 50, dryRun: false });
+          console.log(`✨ Evolution finished in ${Date.now() - start}ms.`);
+          console.log(`   Opportunities inspected: ${report.opportunitiesFound}`);
+          console.log(`   Skills synthesized: ${report.skillsSynthesized.length}`);
+          for (const s of report.skillsSynthesized) {
+            console.log(`   • ${green}${s.name}${reset} (v${s.version})`);
+          }
+          console.log('');
+        } catch (err: unknown) {
+          console.error(`❌ Evolution cycle failed:`, err instanceof Error ? err.message : String(err));
+        }
+        rl.prompt();
+        return;
+      }
+
+      if (cmd === 'history') {
+        console.log(`\n${bold}💬 Conversation History (${Math.floor(history.length / 2)} turns):${reset}`);
+        if (history.length === 0) {
+          console.log(`  ${dim}No turns in current session yet.${reset}`);
+        } else {
+          for (let i = 0; i < history.length; i++) {
+            const h = history[i];
+            const roleColor = h.role === 'user' ? cyan : green;
+            console.log(`  [${roleColor}${h.role.toUpperCase()}${reset}]: ${h.content.slice(0, 100)}${h.content.length > 100 ? '...' : ''}`);
+          }
+        }
+        console.log('');
+        rl.prompt();
+        return;
+      }
+
+      if (cmd === 'reset') {
+        history.length = 0;
+        console.log(`🔄 ${green}Session conversation history cleared.${reset}\n`);
+        rl.prompt();
+        return;
+      }
+
+      if (cmd === 'clear') {
+        console.clear();
+        rl.prompt();
+        return;
+      }
+
+      console.log(`⚠️ Unknown slash command: "/${cmd}". Type ${yellow}/help${reset} for list of commands.`);
+      rl.prompt();
+      return;
+    }
+
+    // 3. Fast Path Agent Execution
     try {
       const start = Date.now();
       const result = await router.executeFastPath({
@@ -158,8 +395,16 @@ function startInteractiveChat() {
       });
 
       console.log(`\n${result.output}\n`);
+
+      const skillsStr = result.retrievedSkills.length > 0
+        ? result.retrievedSkills.map((s) => s.name).join(', ')
+        : 'none';
+      const toolsStr = result.toolCallsMade.length > 0
+        ? ` | 🛠️ Tools: ${result.toolCallsMade.map((t) => t.toolName).join(', ')}`
+        : '';
+
       console.log(
-        `[⚡ ${Date.now() - start}ms | ${result.tokensUsed.totalTokens} tokens | Skills: ${result.retrievedSkills.map((s) => s.name).join(', ') || 'none'}]\n`
+        `${dim}[⚡ ${Date.now() - start}ms | ${result.tokensUsed.totalTokens} tokens (Prompt: ${result.tokensUsed.promptTokens}, Comp: ${result.tokensUsed.completionTokens}) | Skills: ${skillsStr}${toolsStr}]${reset}\n`
       );
 
       history.push({ role: 'user', content: trimmed });
@@ -197,14 +442,18 @@ program
   .command('run [prompt]')
   .description('Execute a single Fast Path agent turn (<1,500 token budget) or start interactive chat if omitted')
   .option('-s, --session <id>', 'Session identifier', `session_${Date.now()}`)
-  .action(async (prompt: string | undefined, options: { session: string }) => {
+  .option('--stream', 'Stream response tokens with typing pacing to stdout', false)
+  .option('--json', 'Output machine-readable JSON result', false)
+  .action(async (prompt: string | undefined, options: { session: string; stream: boolean; json: boolean }) => {
     if (!prompt) {
       console.log('💡 No prompt provided. Entering OpenTalon interactive chat...\n');
       return startInteractiveChat();
     }
 
     const { router } = getComponents();
-    console.log(`\n🤖 [Fast Path] Input: "${prompt}" (Session: ${options.session})`);
+    if (!options.json) {
+      console.log(`\n🤖 [Fast Path] Input: "${prompt}" (Session: ${options.session})`);
+    }
     const start = Date.now();
 
     try {
@@ -213,9 +462,31 @@ program
         input: prompt,
       });
 
-      console.log('\n--- Output ---');
-      console.log(result.output);
-      console.log('--------------');
+      if (options.json) {
+        const sanitized = {
+          ...result,
+          retrievedSkills: result.retrievedSkills.map(({ embedding, ...rest }) => rest),
+        };
+        console.log(JSON.stringify(sanitized, null, 2));
+        return;
+      }
+
+      if (options.stream) {
+        console.log('\n--- Output (Streaming) ---');
+        const words = result.output.split(/(\s+)/);
+        for (const w of words) {
+          process.stdout.write(w);
+          if (w.trim().length > 0) {
+            await new Promise((r) => setTimeout(r, 10));
+          }
+        }
+        process.stdout.write('\n--------------------------\n');
+      } else {
+        console.log('\n--- Output ---');
+        console.log(result.output);
+        console.log('--------------');
+      }
+
       console.log(`⏱️ Latency: ${result.latencyMs}ms | Total Elapsed: ${Date.now() - start}ms`);
       console.log(
         `📊 Tokens: ${result.tokensUsed.totalTokens} (Prompt: ${result.tokensUsed.promptTokens}, Completion: ${result.tokensUsed.completionTokens})`
@@ -241,7 +512,7 @@ program
   .command('chat')
   .description('Launch interactive multi-turn REPL chat session with OpenTalon')
   .action(async () => {
-    startInteractiveChat();
+    await startInteractiveChat();
   });
 
 // 4. `talon serve`
@@ -489,18 +760,21 @@ mcpCommand
   });
 
 mcpCommand
-  .command('call <toolName> [argsJson]')
+  .command('call <toolName> [argsJson...]')
   .description('Invoke an MCP tool call directly')
-  .action(async (toolName: string, argsJson?: string) => {
+  .action(async (toolName: string, argsJsonParts?: string[]) => {
     const { mcpServer, memory } = getComponents();
     await memory.initialize();
 
+    const rawArgs = argsJsonParts && argsJsonParts.length > 0 ? argsJsonParts.join(' ') : '{}';
     let args = {};
-    if (argsJson) {
+    try {
+      args = JSON.parse(rawArgs);
+    } catch {
       try {
-        args = JSON.parse(argsJson);
+        args = JSON.parse(rawArgs.replace(/'/g, '"'));
       } catch {
-        console.error('❌ Invalid JSON arguments string.');
+        console.error('❌ Invalid JSON arguments string:', rawArgs);
         await memory.close();
         process.exit(1);
       }
@@ -606,9 +880,9 @@ skillsCommand
   });
 
 skillsCommand
-  .command('run <skillName> [argsJson]')
+  .command('run <skillName> [argsJson...]')
   .description('Execute a registered procedural skill directly in the Zero-Trust Sandbox')
-  .action(async (skillName: string, argsJson?: string) => {
+  .action(async (skillName: string, argsJsonParts?: string[]) => {
     const { memory, sandbox } = getComponents();
     await memory.initialize();
 
@@ -619,12 +893,15 @@ skillsCommand
       process.exit(1);
     }
 
+    const rawArgs = argsJsonParts && argsJsonParts.length > 0 ? argsJsonParts.join(' ') : '{}';
     let parsedArgs: Record<string, unknown> = {};
-    if (argsJson) {
+    try {
+      parsedArgs = JSON.parse(rawArgs);
+    } catch {
       try {
-        parsedArgs = JSON.parse(argsJson);
+        parsedArgs = JSON.parse(rawArgs.replace(/'/g, '"'));
       } catch {
-        console.error('❌ Invalid JSON arguments string provided.');
+        console.error('❌ Invalid JSON arguments string provided:', rawArgs);
         await memory.close();
         process.exit(1);
       }

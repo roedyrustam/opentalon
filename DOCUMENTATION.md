@@ -130,11 +130,18 @@ talon init
 # ✅ OpenTalon workspace is ready.
 ```
 
-#### 2. `talon run <prompt>`
-Executes a single conversational agent turn on the **Fast Path** with token budget enforcement ($< 1,500$ tokens).
+#### 2. `talon run [prompt]`
+Executes a single conversational agent turn on the **Fast Path** with token budget enforcement ($< 1,500$ tokens). If called without a prompt, it automatically launches the interactive REPL chat session.
 
 ```bash
+# Direct execution with metrics
 talon run "convert 100 USD to EUR"
+
+# Stream response tokens with typing pacing
+talon run "explain quantum computing in 2 sentences" --stream
+
+# Output clean machine-readable JSON (with sanitized embedding vectors)
+talon run "what is 2+2" --json
 ```
 
 Output details include:
@@ -144,7 +151,25 @@ Output details include:
 - Dynamically retrieved procedural skills matching the prompt.
 - Sandboxed tool executions.
 
-#### 3. `talon serve`
+#### 3. `talon chat` (Interactive Multi-Turn REPL)
+Launches an interactive multi-turn REPL chat session maintaining contextual conversation history across turns:
+
+```bash
+talon chat
+```
+
+Built-in slash commands during interactive chat:
+- `/help`: Display available REPL slash commands.
+- `/skills`: List all registered procedural skills.
+- `/facts`: View persistent long-term semantic facts.
+- `/stats`: Display live session token usage and latency.
+- `/evolve`: Trigger an autonomous Slow Path evolution cycle.
+- `/history`: Print conversation turn history for the active session.
+- `/reset`: Clear current session conversation history.
+- `/clear`: Clear terminal screen.
+- `/quit` or `/exit`: Exit REPL session.
+
+#### 4. `talon serve`
 Spawns the local HTTP gateway daemon for local background execution or IDE integrations. Use `--auto-evolve` to enable autonomous Slow Path skill synthesis directly from background traces.
 
 ```bash
@@ -156,7 +181,7 @@ Available daemon endpoints:
 - `POST /v1/chat`: JSON endpoint for agent turns.
 - `POST /v1/stream`: Real-time Server-Sent Events (SSE) token streaming.
 
-#### 4. `talon evolve`
+#### 5. `talon evolve`
 Executes an autonomous Hermes-style Slow Path evolution cycle. Scans episodic traces, extracts missing or failing capability opportunities, prompts System-2 LLM reflection, tests candidates in the sandbox, and commits verified skills to procedural memory.
 
 ```bash
@@ -170,126 +195,126 @@ talon evolve --limit 50 --dry-run
 talon evolve --json
 ```
 
-#### 5. `talon skills list`
+#### 6. `talon skills list`
 Lists all procedural skills registered in the SQLite memory database, along with their semantic versions, capability boundaries, and content hashes.
 
 ```bash
 talon skills list
 ```
 
-#### 6. `talon skills add <filePath>`
+#### 7. `talon skills add <filePath>`
 Parses a `SKILL.md` file, verifies its capabilities, executes its test cases in the Zero-Trust Sandbox, and commits it into procedural memory.
 
 ```bash
 talon skills add examples/skills/currency-converter.md
 ```
 
-#### 7. `talon skills run <skillName> [argsJson]`
-Executes a registered procedural skill directly in the Zero-Trust Sandbox without LLM overhead, showing execution time, logs, and return data.
+#### 8. `talon skills run <skillName> [argsJson]`
+Executes a registered procedural skill directly in the Zero-Trust Sandbox without LLM overhead, showing execution time, logs, and return data. Supports single and double quotes or variadic argument strings.
 
 ```bash
 talon skills run doku_payment_checkout '{"action":"generate_checkout","amount":150000}'
 ```
 
-#### 8. `talon skills info <skillName>`
+#### 9. `talon skills info <skillName>`
 Inspects full metadata, capabilities whitelist, code implementation, test cases, and SHA-256 hash of a procedural skill.
 
 ```bash
 talon skills info doku_payment_checkout
 ```
 
-#### 9. `talon skills remove <skillName>`
+#### 10. `talon skills remove <skillName>`
 Deletes a skill from both the procedural memory repository and the full-text search (FTS5) index.
 
 ```bash
 talon skills remove doku_payment_checkout
 ```
 
-#### 10. `talon mcp serve`
+#### 11. `talon mcp serve`
 Starts the OpenTalon Model Context Protocol server over Stdio, compliant with specification 2024-11-05 for instant plug-and-play connection with Claude Desktop, Cursor, and Antigravity.
 
 ```bash
 talon mcp serve
 ```
 
-#### 11. `talon mcp list`
+#### 12. `talon mcp list`
 Lists all procedural tools and resources currently exposed by the OpenTalon MCP server.
 
 ```bash
 talon mcp list
 ```
 
-#### 12. `talon mcp call <toolName> [argsJson]`
+#### 13. `talon mcp call <toolName> [argsJson]`
 Directly invokes an MCP tool through OpenTalon's JSON-RPC 2.0 handler.
 
 ```bash
 talon mcp call doku_payment_checkout '{"action":"generate_checkout","amount":250000}'
 ```
 
-#### 13. `talon mcp import <endpointUrl>`
+#### 14. `talon mcp import <endpointUrl>`
 Discovers tools from an external HTTP MCP server and automatically compiles sandboxed procedural skills into local memory via `McpToolBridge`.
 
 ```bash
 talon mcp import http://127.0.0.1:8000/rpc --prefix ext
 ```
 
-#### 14. `talon swarm fanout <task>`
+#### 15. `talon swarm fanout <task>`
 Runs a parallel multi-agent swarm delegation (System Architect, Security Sentinel, Fullstack Craftsman) with unified consensus synthesis.
 
 ```bash
 talon swarm fanout "Design high-concurrency payment webhook processor"
 ```
 
-#### 15. `talon swarm saga <task>`
+#### 16. `talon swarm saga <task>`
 Runs a sequential pipeline saga with dependent stages (Discovery &rarr; Contracts &rarr; Implementation).
 
 ```bash
 talon swarm saga "Build automated refund reconciliation module"
 ```
 
-#### 16. `talon swarm critic <task>`
+#### 17. `talon swarm critic <task>`
 Runs an adversarial Critic-Validator Loop with zero-tolerance quality gates and automated self-healing critique retries.
 
 ```bash
 talon swarm critic "Implement cryptographic token signer" -r 3
 ```
 
-#### 17. `talon memory list`
+#### 18. `talon memory list`
 Lists all long-term semantic facts, user preferences, and domain knowledge entities stored in the SQLite database.
 
 ```bash
 talon memory list --category user_preference
 ```
 
-#### 18. `talon memory add <key> <value>`
+#### 19. `talon memory add <key> <value>`
 Commits a new persistent semantic fact or user preference into libSQL memory.
 
 ```bash
 talon memory add preferred_currency IDR --category user_preference
 ```
 
-#### 19. `talon memory search <query>`
+#### 20. `talon memory search <query>`
 Searches stored facts and knowledge using FTS5 full-text keyword indexing.
 
 ```bash
 talon memory search "currency"
 ```
 
-#### 20. `talon memory remove <factId>`
+#### 21. `talon memory remove <factId>`
 Deletes a semantic fact from long-term memory.
 
 ```bash
 talon memory remove fact_1719283921_a83f9
 ```
 
-#### 21. `talon memory export [filePath]`
+#### 22. `talon memory export [filePath]`
 Exports the entire knowledge repository (procedural skills, semantic facts, and optional episodic traces) to a portable JSON snapshot.
 
 ```bash
 talon memory export backup-snapshot.json --include-traces
 ```
 
-#### 22. `talon memory import <filePath>`
+#### 23. `talon memory import <filePath>`
 Restores memory state, skills, and facts from a JSON snapshot into the active database.
 
 ```bash
