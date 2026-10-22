@@ -145,30 +145,39 @@ Output details include:
 - Sandboxed tool executions.
 
 #### 3. `talon serve`
-Spawns the local HTTP gateway daemon for local background execution or IDE integrations.
+Spawns the local HTTP gateway daemon for local background execution or IDE integrations. Use `--auto-evolve` to enable autonomous Slow Path skill synthesis directly from background traces.
 
 ```bash
-talon serve --port 3100 --host 127.0.0.1
+talon serve --port 3100 --host 127.0.0.1 --auto-evolve
 ```
 
 Available daemon endpoints:
 - `GET /health`: Healthcheck and uptime verification.
-- `POST /v1/chat`: JSON endpoint for agent turns:
-  ```json
-  {
-    "input": "convert 25 USD to IDR",
-    "sessionId": "user_session_42"
-  }
-  ```
+- `POST /v1/chat`: JSON endpoint for agent turns.
+- `POST /v1/stream`: Real-time Server-Sent Events (SSE) token streaming.
 
-#### 4. `talon skills list`
+#### 4. `talon evolve`
+Executes an autonomous Hermes-style Slow Path evolution cycle. Scans episodic traces, extracts missing or failing capability opportunities, prompts System-2 LLM reflection, tests candidates in the sandbox, and commits verified skills to procedural memory.
+
+```bash
+# Run evolution cycle across the last 100 traces
+talon evolve --limit 100
+
+# Dry-run validation (verifies in sandbox without writing to DB)
+talon evolve --limit 50 --dry-run
+
+# Output machine-readable JSON for CI/CD telemetry
+talon evolve --json
+```
+
+#### 5. `talon skills list`
 Lists all procedural skills registered in the SQLite memory database, along with their semantic versions, capability boundaries, and content hashes.
 
 ```bash
 talon skills list
 ```
 
-#### 5. `talon skills add <filePath>`
+#### 6. `talon skills add <filePath>`
 Parses a `SKILL.md` file, verifies its capabilities, executes its test cases in the Zero-Trust Sandbox, and commits it into procedural memory.
 
 ```bash
@@ -187,11 +196,12 @@ OpenTalon separates immediate response latency from background cognitive evoluti
 - **Prefix KV-Cache Locking**: System instructions and skill schemas are pinned deterministically at the head of the prompt payload.
 - **Non-Blocking Telemetry**: Emits complete execution traces (`input`, `output`, `tokens`, `toolCalls`, `latencyMs`) to an async background channel and returns results to the user instantly.
 
-### 2. Slow Path (Evolutionary Loop)
-- **Trace Ingestion**: Evaluates outcome traces from the Fast Path (detecting errors, repetitive tool sequences, or high token cost).
-- **LLM Reflection**: Invokes deep reasoning models (e.g. Gemini 4 Pro / Thinking Budget) to extract procedural heuristics.
-- **Skill Synthesis**: Automatically writes modular `SKILL.md` implementations.
-- **Verification Gate**: Executes synthesized skills against test cases inside the Zero-Trust Sandbox. If any assertion fails or an unauthorized syscall is attempted, the skill candidate is discarded.
+### 2. Slow Path (Evolutionary Loop & Closed-Loop Heuristics)
+- **Debounced Evolution Queue**: Buffers incoming traces in-memory (5,000ms debounce window or max 5 batch size) to avoid thundering herd and token cost spikes.
+- **Trace Ingestion**: Evaluates outcome traces from the Fast Path (detecting errors, repetitive tool sequences, or queries lacking dedicated skills).
+- **Circuit Breaker**: Automatically trips and skips opportunities exceeding 2 consecutive sandbox failures, preventing infinite recursion loops.
+- **FinOps Throttle**: Enforces rate limiting (maximum 5 skill syntheses per hour) to preserve API cost ceilings.
+- **Self-Healing Retry**: If initial sandbox verification encounters an error, the synthesizer automatically feeds the stack trace back into a corrective LLM prompt before failing.
 - **Atomic Commit**: Validated skills are committed into procedural memory, incrementing semver and updating the FTS5/vector indices for instant Fast Path access.
 
 ---

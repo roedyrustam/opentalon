@@ -90,4 +90,6 @@ export interface RouterConfig {
   synthesizer?: SkillSynthesizer;
   maxFastPathTokens?: number; // Default 1500
   enableAsyncEvolution?: boolean; // Default true
+  evolutionDebounceMs?: number; // In-memory debounce buffer window (Default 5000ms)
+  maxEvolutionBatchSize?: number; // Trigger threshold if buffer fills (Default 5 traces)
 }

@@ -50,7 +50,7 @@ export class HeuristicsExtractor {
     // Convert failure groups to healing opportunities
     for (const [toolName, group] of failureGroups.entries()) {
       opportunities.push({
-        id: `opp_heal_${toolName}_${Date.now()}`,
+        id: `opp_heal_${toolName}`,
         type: 'heal_failure',
         reason: `Detected ${group.length} failure(s) in tool execution: ${toolName}`,
         intent: group[0].input,
@@ -64,7 +64,7 @@ export class HeuristicsExtractor {
     for (const [sig, group] of missingSkillGroups.entries()) {
       if (group.length >= 1) {
         opportunities.push({
-          id: `opp_synth_${sig}_${Date.now()}`,
+          id: `opp_synth_${sig}`,
           type: 'synthesize_new',
           reason: `Repeated user task without dedicated procedural skill: "${sig}"`,
           intent: group[0].input,

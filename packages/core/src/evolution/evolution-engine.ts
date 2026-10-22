@@ -13,7 +13,22 @@ export interface EvolutionReport {
     type: string;
     hash: string;
   }>;
+  skipped: Array<{
+    opportunityId: string;
+    reason: string;
+  }>;
   errors: string[];
+}
+
+export interface EvolutionEngineOptions {
+  maxRetriesPerOpportunity?: number; // Circuit breaker threshold (default: 2)
+  maxSynthesesPerHour?: number;      // FinOps rate limit (default: 5)
+  enableSelfHealingRetry?: boolean;  // Self-heal retry with sandbox error feedback (default: true)
+}
+
+export interface EvolutionCycleOptions {
+  traceLimit?: number;
+  dryRun?: boolean;
 }
 
 export class EvolutionEngine {
@@ -21,22 +36,66 @@ export class EvolutionEngine {
   private sandbox: ISkillSandbox;
   private llm: ILLMPort;
   private synthesizer: SkillSynthesizer;
+  private maxRetriesPerOpportunity: number;
+  private maxSynthesesPerHour: number;
+  private enableSelfHealingRetry: boolean;
 
-  constructor(memory: IMemoryPort, sandbox: ISkillSandbox, llm: ILLMPort) {
+  // Circuit breaker state
+  private failedAttempts: Map<string, number> = new Map();
+
+  // FinOps history timestamps (ms)
+  private synthesisTimestamps: number[] = [];
+
+  constructor(
+    memory: IMemoryPort,
+    sandbox: ISkillSandbox,
+    llm: ILLMPort,
+    options?: EvolutionEngineOptions
+  ) {
     this.memory = memory;
     this.sandbox = sandbox;
     this.llm = llm;
     this.synthesizer = new SkillSynthesizer(this.sandbox);
+    this.maxRetriesPerOpportunity = options?.maxRetriesPerOpportunity ?? 2;
+    this.maxSynthesesPerHour = options?.maxSynthesesPerHour ?? 5;
+    this.enableSelfHealingRetry = options?.enableSelfHealingRetry ?? true;
+  }
+
+  /**
+   * Returns current count of syntheses executed within the sliding 1-hour window.
+   */
+  public getSynthesesInPastHour(): number {
+    const oneHourAgo = Date.now() - 3600000;
+    this.synthesisTimestamps = this.synthesisTimestamps.filter((ts) => ts > oneHourAgo);
+    return this.synthesisTimestamps.length;
+  }
+
+  /**
+   * Resets circuit breaker counters (useful for tests and manual operator resets).
+   */
+  public resetCircuitBreaker(): void {
+    this.failedAttempts.clear();
   }
 
   /**
    * Executes a full Hermes-style slow-path evolution cycle:
    * 1. Inspects recent traces & errors.
-   * 2. Extracts evolution opportunities.
-   * 3. Uses LLM Reflection (System-2 Thinking) to synthesize or patch skills.
-   * 4. Sandbox-tests candidates and commits to procedural memory.
+   * 2. Extracts evolution opportunities via HeuristicsExtractor.
+   * 3. Applies FinOps throttling & Circuit Breaker checks.
+   * 4. Uses LLM Reflection (System-2 Thinking) to synthesize or patch skills.
+   * 5. Sandbox-tests candidates with optional self-healing retry.
+   * 6. Commits verified skills to procedural memory.
    */
-  public async runEvolutionCycle(traceLimit = 100): Promise<EvolutionReport> {
+  public async runEvolutionCycle(
+    optionsOrLimit?: number | EvolutionCycleOptions
+  ): Promise<EvolutionReport> {
+    const traceLimit =
+      typeof optionsOrLimit === 'number'
+        ? optionsOrLimit
+        : optionsOrLimit?.traceLimit ?? 100;
+    const dryRun =
+      typeof optionsOrLimit === 'object' ? Boolean(optionsOrLimit.dryRun) : false;
+
     const traces = await this.memory.getRecentTraces(traceLimit);
     const opportunities = HeuristicsExtractor.extractOpportunities(traces);
 
@@ -44,12 +103,32 @@ export class EvolutionEngine {
       timestamp: Date.now(),
       opportunitiesFound: opportunities.length,
       skillsSynthesized: [],
+      skipped: [],
       errors: [],
     };
 
     for (const opp of opportunities) {
+      // 1. Check Circuit Breaker
+      const attempts = this.failedAttempts.get(opp.id) || 0;
+      if (attempts >= this.maxRetriesPerOpportunity) {
+        report.skipped.push({
+          opportunityId: opp.id,
+          reason: `Circuit breaker tripped: exceeded ${this.maxRetriesPerOpportunity} failed attempts`,
+        });
+        continue;
+      }
+
+      // 2. Check FinOps Rate Throttle
+      if (this.getSynthesesInPastHour() >= this.maxSynthesesPerHour) {
+        report.skipped.push({
+          opportunityId: opp.id,
+          reason: `FinOps rate limit reached: maximum ${this.maxSynthesesPerHour} syntheses per hour`,
+        });
+        continue;
+      }
+
       try {
-        const synthesizedSkill = await this.evolveOpportunity(opp);
+        const synthesizedSkill = await this.evolveOpportunity(opp, { dryRun });
         if (synthesizedSkill) {
           report.skillsSynthesized.push({
             name: synthesizedSkill.name,
@@ -57,9 +136,14 @@ export class EvolutionEngine {
             type: opp.type,
             hash: synthesizedSkill.hash,
           });
+          // Successful evolution: record timestamp for FinOps
+          this.synthesisTimestamps.push(Date.now());
+          // Clear any failure tracking for this opportunity
+          this.failedAttempts.delete(opp.id);
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
+        this.failedAttempts.set(opp.id, attempts + 1);
         report.errors.push(`Failed to evolve opportunity [${opp.id}]: ${msg}`);
       }
     }
@@ -69,9 +153,14 @@ export class EvolutionEngine {
 
   /**
    * Evolves a single opportunity by asking the LLM to reflect and draft a verified SKILL.md.
+   * Supports an automatic self-healing retry if sandbox verification fails on first attempt.
    */
-  public async evolveOpportunity(opp: EvolutionOpportunity): Promise<ProceduralSkill | null> {
-    const reflectionPrompt = `
+  public async evolveOpportunity(
+    opp: EvolutionOpportunity,
+    options?: { dryRun?: boolean },
+    retryState?: { isRetry: boolean; previousError: string }
+  ): Promise<ProceduralSkill | null> {
+    let reflectionPrompt = `
 You are the Hermes-Style Autonomous Evolution Brain of OpenTalon.
 Analyze the following execution pattern and synthesize an immutable, production-grade procedural skill in clean SKILL.md format.
 
@@ -90,6 +179,15 @@ REQUIREMENTS:
 3. Include clean JSON test cases in a \`\`\`json block.
 4. DO NOT provide placeholder code or commentary outside the markdown.
 `;
+
+    if (retryState?.isRetry) {
+      reflectionPrompt += `
+CRITICAL FIX REQUIRED:
+Your previous synthesis attempt failed sandbox verification with error:
+"${retryState.previousError}"
+Please fix the code logic, parameters, or test cases to ensure strict sandbox pass.
+`;
+    }
 
     const llmResponse = await this.llm.generateContent({
       systemInstruction: 'You are an autonomous code synthesizer. Output valid SKILL.md only.',
@@ -128,6 +226,13 @@ REQUIREMENTS:
     });
 
     if (!synthResult.success || !synthResult.skillDocument) {
+      // Self-healing retry if not already retrying
+      if (this.enableSelfHealingRetry && !retryState?.isRetry) {
+        return this.evolveOpportunity(opp, options, {
+          isRetry: true,
+          previousError: synthResult.error || 'Unknown sandbox failure',
+        });
+      }
       throw new Error(`Sandbox verification failed: ${synthResult.error}`);
     }
 
@@ -156,8 +261,11 @@ REQUIREMENTS:
       updatedAt: Date.now(),
     };
 
-    // Commit to procedural memory
-    await this.memory.saveSkill(skill);
+    // If dryRun, do not commit to memory
+    if (!options?.dryRun) {
+      await this.memory.saveSkill(skill);
+    }
+
     return skill;
   }
 

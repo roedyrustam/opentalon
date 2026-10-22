@@ -10,6 +10,7 @@ import {
 } from '../types.js';
 import { type IMemoryPort, type ProceduralSkill, type EpisodicTrace } from '@opentalon/memory';
 import { type ISkillSandbox, SkillSynthesizer, SkillMarkdownParser } from '@opentalon/skill-engine';
+import { EvolutionEngine, type EvolutionReport } from '../evolution/evolution-engine.js';
 import { TokenBudgeter } from '../token/budgeter.js';
 
 export class DualBrainRouter extends EventEmitter {
@@ -17,8 +18,16 @@ export class DualBrainRouter extends EventEmitter {
   private sandbox: ISkillSandbox;
   private llm: ILLMPort;
   private synthesizer: SkillSynthesizer;
+  private evolutionEngine: EvolutionEngine;
   private maxFastPathTokens: number;
   private enableAsyncEvolution: boolean;
+  private evolutionDebounceMs: number;
+  private maxEvolutionBatchSize: number;
+
+  // In-memory debounced queue state
+  private traceQueue: EpisodicTrace[] = [];
+  private evolutionTimer: NodeJS.Timeout | null = null;
+  private isEvolving = false;
 
   constructor(config: RouterConfig) {
     super();
@@ -26,8 +35,11 @@ export class DualBrainRouter extends EventEmitter {
     this.sandbox = config.sandbox;
     this.llm = config.llm;
     this.synthesizer = config.synthesizer ?? new SkillSynthesizer(this.sandbox);
+    this.evolutionEngine = new EvolutionEngine(this.memory, this.sandbox, this.llm);
     this.maxFastPathTokens = config.maxFastPathTokens ?? 1500;
     this.enableAsyncEvolution = config.enableAsyncEvolution ?? true;
+    this.evolutionDebounceMs = config.evolutionDebounceMs ?? 5000;
+    this.maxEvolutionBatchSize = config.maxEvolutionBatchSize ?? 5;
 
     // Register async Slow Path evolution event listener
     this.on('trace:emitted', (trace: EpisodicTrace) => {
@@ -49,6 +61,14 @@ export class DualBrainRouter extends EventEmitter {
 
   public getLLM(): ILLMPort {
     return this.llm;
+  }
+
+  public getEvolutionEngine(): EvolutionEngine {
+    return this.evolutionEngine;
+  }
+
+  public getTraceQueueLength(): number {
+    return this.traceQueue.length;
   }
 
   /**
@@ -179,23 +199,79 @@ export class DualBrainRouter extends EventEmitter {
   }
 
   /**
-   * Slow Path: Non-blocking background evolution and skill synthesis.
+   * Slow Path: Queues trace into in-memory buffer and schedules debounced evolution flush.
    */
   public async processSlowPathEvolution(trace: EpisodicTrace): Promise<void> {
-    this.emit('slowpath:started', trace.id);
+    this.emit('slowpath:queued', trace.id);
+    this.traceQueue.push(trace);
 
-    // If execution was complex or had failures, evaluate for heuristic extraction
-    const hasToolCalls = trace.toolCalls.length > 0;
-    const isSuccess = trace.success;
-
-    if (hasToolCalls && isSuccess) {
-      // Evaluate if the tool call represents a reusable pattern
-      // For demonstration and production stability, synthesis can refine existing skills
-      this.emit('slowpath:evaluated', { traceId: trace.id, status: 'stable' });
+    // If batch size threshold reached, flush immediately
+    if (this.traceQueue.length >= this.maxEvolutionBatchSize) {
+      if (this.evolutionTimer) {
+        clearTimeout(this.evolutionTimer);
+        this.evolutionTimer = null;
+      }
+      await this.flushEvolutionQueue();
       return;
     }
 
-    this.emit('slowpath:completed', { traceId: trace.id });
+    // Debounce timer for accumulating traces
+    if (this.evolutionTimer) {
+      clearTimeout(this.evolutionTimer);
+    }
+    this.evolutionTimer = setTimeout(() => {
+      this.flushEvolutionQueue().catch((err) => {
+        this.emit('slowpath:error', err);
+      });
+    }, this.evolutionDebounceMs);
+  }
+
+  /**
+   * Flushes the queued traces and triggers a Hermes-style evolution cycle.
+   */
+  public async flushEvolutionQueue(): Promise<EvolutionReport | null> {
+    if (this.isEvolving || this.traceQueue.length === 0) {
+      return null;
+    }
+
+    if (this.evolutionTimer) {
+      clearTimeout(this.evolutionTimer);
+      this.evolutionTimer = null;
+    }
+
+    this.isEvolving = true;
+    const batchSize = this.traceQueue.length;
+    this.traceQueue = [];
+
+    this.emit('slowpath:started', { batchSize });
+
+    try {
+      const report = await this.evolutionEngine.runEvolutionCycle(50);
+      this.emit('slowpath:completed', report);
+      return report;
+    } catch (err) {
+      this.emit('slowpath:error', err);
+      throw err;
+    } finally {
+      this.isEvolving = false;
+      // If new traces arrived while evolving, schedule next flush
+      if (this.traceQueue.length > 0 && !this.evolutionTimer) {
+        this.evolutionTimer = setTimeout(() => {
+          this.flushEvolutionQueue().catch((err) => this.emit('slowpath:error', err));
+        }, this.evolutionDebounceMs);
+      }
+    }
+  }
+
+  /**
+   * Disposes timers and active queue listeners on shutdown.
+   */
+  public dispose(): void {
+    if (this.evolutionTimer) {
+      clearTimeout(this.evolutionTimer);
+      this.evolutionTimer = null;
+    }
+    this.traceQueue = [];
   }
 
   /**

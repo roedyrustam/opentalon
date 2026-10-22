@@ -186,9 +186,25 @@ program
   .description('Start the local OpenTalon HTTP gateway daemon')
   .option('-p, --port <number>', 'Port to listen on', '3100')
   .option('-h, --host <string>', 'Host interface', '127.0.0.1')
-  .action(async (options: { port: string; host: string }) => {
+  .option('--auto-evolve', 'Enable autonomous Slow Path evolution on incoming traces', false)
+  .action(async (options: { port: string; host: string; autoEvolve: boolean }) => {
     const port = parseInt(options.port, 10);
     const { router } = getComponents();
+
+    if (options.autoEvolve) {
+      console.log('🧠 Autonomous Slow Path Evolution: ENABLED (Hermes reflection loop active)');
+      router.on('slowpath:completed', (report: any) => {
+        if (report?.skillsSynthesized?.length > 0) {
+          for (const s of report.skillsSynthesized) {
+            console.log(`✨ [Auto-Evolve] Synthesized and registered new skill: ${s.name} (v${s.version})`);
+          }
+        }
+      });
+      router.on('slowpath:error', (err: any) => {
+        console.warn(`⚠️ [Auto-Evolve] Background evolution warning: ${err instanceof Error ? err.message : String(err)}`);
+      });
+    }
+
     const daemon = new LocalDaemonAdapter(router, { port, host: options.host });
 
     console.log(`🌐 Starting OpenTalon Local Daemon on http://${options.host}:${port}...`);
@@ -236,13 +252,27 @@ program
   .command('evolve')
   .description('Run an autonomous Slow Path evolution cycle (Hermes reflection & auto-patching)')
   .option('-l, --limit <number>', 'Maximum traces to inspect', '100')
-  .action(async (options: { limit: string }) => {
+  .option('--dry-run', 'Inspect opportunities and validate synthesis in sandbox without committing to database', false)
+  .option('--json', 'Output machine-readable JSON evolution report', false)
+  .action(async (options: { limit: string; dryRun: boolean; json: boolean }) => {
     const limit = parseInt(options.limit, 10);
     const { evolutionEngine } = getComponents();
 
-    console.log(`\n🧠 Running Autonomous Slow Path Evolution Cycle (scanning last ${limit} traces)...`);
     const start = Date.now();
-    const report = await evolutionEngine.runEvolutionCycle(limit);
+    const report = await evolutionEngine.runEvolutionCycle({
+      traceLimit: limit,
+      dryRun: options.dryRun,
+    });
+
+    if (options.json) {
+      console.log(JSON.stringify({ ...report, durationMs: Date.now() - start }, null, 2));
+      return;
+    }
+
+    console.log(`\n🧠 Running Autonomous Slow Path Evolution Cycle (scanning last ${limit} traces)...`);
+    if (options.dryRun) {
+      console.log('🔍 [DRY-RUN MODE] Verified skills will NOT be committed to database.');
+    }
 
     console.log(`\n--- Evolution Report (${Date.now() - start}ms) ---`);
     console.log(`Opportunities detected: ${report.opportunitiesFound}`);
@@ -250,6 +280,13 @@ program
 
     for (const skill of report.skillsSynthesized) {
       console.log(`  ✨ ${skill.name} (v${skill.version}) [Type: ${skill.type}] (Hash: ${skill.hash.slice(0, 10)}...)`);
+    }
+
+    if (report.skipped && report.skipped.length > 0) {
+      console.log('\nSkipped Opportunities (FinOps / Circuit Breaker):');
+      for (const skip of report.skipped) {
+        console.log(`  🛑 [${skip.opportunityId}]: ${skip.reason}`);
+      }
     }
 
     if (report.errors.length > 0) {
