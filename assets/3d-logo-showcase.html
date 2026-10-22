@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,7 +14,13 @@
       --violet: #d946ef;
       --emerald: #10b981;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
     body {
       background: radial-gradient(circle at 50% 40%, #111a2e 0%, var(--bg) 70%);
       color: #f8fafc;
@@ -26,6 +33,7 @@
       overflow: hidden;
       user-select: none;
     }
+
     .container {
       position: relative;
       display: flex;
@@ -34,6 +42,7 @@
       gap: 1.5rem;
       z-index: 10;
     }
+
     #talonCanvas {
       width: 480px;
       height: 480px;
@@ -43,9 +52,11 @@
       cursor: grab;
       filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.8));
     }
+
     #talonCanvas:active {
       cursor: grabbing;
     }
+
     .hud {
       display: flex;
       gap: 1rem;
@@ -58,6 +69,7 @@
       font-size: 0.85rem;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     }
+
     .mode-btn {
       background: transparent;
       border: 1px solid transparent;
@@ -68,29 +80,34 @@
       font-weight: 600;
       transition: all 0.2s ease;
     }
+
     .mode-btn.active-fast {
       background: rgba(0, 242, 254, 0.15);
       border-color: rgba(0, 242, 254, 0.5);
       color: var(--cyan);
       box-shadow: 0 0 12px rgba(0, 242, 254, 0.4);
     }
+
     .mode-btn.active-slow {
       background: rgba(217, 70, 239, 0.15);
       border-color: rgba(217, 70, 239, 0.5);
       color: var(--violet);
       box-shadow: 0 0 12px rgba(217, 70, 239, 0.4);
     }
+
     .brand-title {
       font-size: 1.75rem;
       font-weight: 900;
       letter-spacing: -0.03em;
       text-align: center;
     }
+
     .brand-title span {
       background: linear-gradient(135deg, var(--cyan), var(--violet));
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
+
     .brand-subtitle {
       font-family: ui-monospace, monospace;
       font-size: 0.8rem;
@@ -99,6 +116,7 @@
       text-align: center;
       margin-top: -1rem;
     }
+
     .instructions {
       position: absolute;
       bottom: 1.5rem;
@@ -108,6 +126,7 @@
     }
   </style>
 </head>
+
 <body>
 
   <div class="container">
@@ -428,4 +447,5 @@
     render();
   </script>
 </body>
+
 </html>

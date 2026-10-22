@@ -21,7 +21,7 @@
      - Web UI: One-click "Export Snapshot" and "Import Snapshot" modal buttons in Semantic Memory tab.
   3. **Visual Cockpit Dashboard (7 Tabs + 3D Showcase Link)**:
      - **Header**: Interactive quick link to standalone 3D Holographic Core (`/showcase`).
-     - **Overview**: 3D Quantum Holographic Core (60FPS animated canvas) + 5 live telemetry cards (Budget, Skills, Traces, Latency, Facts) + Autonomous Cognitive Evolution (Slow Path) trigger card.
+     - **Overview**: 3D Quantum Holographic Core (60FPS animated canvas with drag-rotation & SSE pulse synchronization) + 5 live telemetry cards (Budget, Skills, Traces, Latency, Facts) + Autonomous Cognitive Evolution (Slow Path) trigger card.
      - **Episodic Traces**: Filterable execution traces, latency, and token consumption table.
      - **Procedural Skills**: Capability whitelist matrix, Zero-Trust Sandbox interactive runner, Register New Skill (SKILL.md) modal, and inline skill deletion.
      - **Swarm Topologies**: Interactive visual dispatcher for Fan-Out/Fan-In, Pipeline Saga, and Critic-Validator Loop.

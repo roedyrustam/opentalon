@@ -118,12 +118,91 @@ program
     console.log('✅ OpenTalon workspace is ready.');
   });
 
-// 2. `talon run <prompt>`
+// Interactive REPL chat session handler
+function startInteractiveChat() {
+  const { router } = getComponents();
+  const sessionId = `repl_${Date.now()}`;
+  const history: ChatMessage[] = [];
+
+  console.log('╔═══════════════════════════════════════════════════════════╗');
+  console.log('║       OpenTalon Interactive REPL (Dual-Brain Agent)       ║');
+  console.log('║  Type your prompt below. Type "exit" or "quit" to leave.  ║');
+  console.log('╚═══════════════════════════════════════════════════════════╝\n');
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    prompt: 'talon> ',
+  });
+
+  rl.prompt();
+
+  rl.on('line', async (line) => {
+    const trimmed = line.trim();
+    if (trimmed === 'exit' || trimmed === 'quit') {
+      console.log('👋 Session ended. Goodbye!');
+      process.exit(0);
+    }
+
+    if (trimmed.length === 0) {
+      rl.prompt();
+      return;
+    }
+
+    try {
+      const start = Date.now();
+      const result = await router.executeFastPath({
+        sessionId,
+        input: trimmed,
+        history,
+      });
+
+      console.log(`\n${result.output}\n`);
+      console.log(
+        `[⚡ ${Date.now() - start}ms | ${result.tokensUsed.totalTokens} tokens | Skills: ${result.retrievedSkills.map((s) => s.name).join(', ') || 'none'}]\n`
+      );
+
+      history.push({ role: 'user', content: trimmed });
+      history.push({ role: 'assistant', content: result.output });
+    } catch (err: unknown) {
+      console.error('❌ Error:', err instanceof Error ? err.message : String(err));
+    }
+
+    rl.prompt();
+  });
+}
+
+// Default action when running `talon` without subcommands
+program.action(() => {
+  console.log(`
+  🦅  OPENTALON CLI (v0.1.0)
+  Next-Generation Dual-Brain Autonomous AI Agent Framework
+  
+  Quick Commands:
+    talon run "<prompt>"    Execute a single turn (<1,500 token budget)
+    talon chat              Launch interactive multi-turn REPL chat
+    talon serve             Start local daemon & Web Cockpit (http://127.0.0.1:3100)
+    talon skills list       List all registered procedural skills
+    talon memory list       View long-term semantic knowledge facts
+    talon memory export     Export portable JSON memory snapshot
+    talon mcp serve         Start Model Context Protocol stdio server
+    talon swarm fanout      Run parallel multi-agent swarm task
+  
+  Run "talon --help" for all commands.
+  `);
+});
+
+// 2. `talon run [prompt]`
 program
-  .command('run <prompt>')
-  .description('Execute a single Fast Path agent turn (<1,500 token budget)')
+  .command('run [prompt]')
+  .description('Execute a single Fast Path agent turn (<1,500 token budget) or start interactive chat if omitted')
   .option('-s, --session <id>', 'Session identifier', `session_${Date.now()}`)
-  .action(async (prompt: string, options: { session: string }) => {
+  .action(async (prompt: string | undefined, options: { session: string }) => {
+    if (!prompt) {
+      console.log('💡 No prompt provided. Entering OpenTalon interactive chat...\n');
+      return startInteractiveChat();
+    }
+
     const { router } = getComponents();
     console.log(`\n🤖 [Fast Path] Input: "${prompt}" (Session: ${options.session})`);
     const start = Date.now();
@@ -162,56 +241,7 @@ program
   .command('chat')
   .description('Launch interactive multi-turn REPL chat session with OpenTalon')
   .action(async () => {
-    const { router } = getComponents();
-    const sessionId = `repl_${Date.now()}`;
-    const history: ChatMessage[] = [];
-
-    console.log('╔═══════════════════════════════════════════════════════════╗');
-    console.log('║       OpenTalon Interactive REPL (Dual-Brain Agent)       ║');
-    console.log('║  Type your prompt below. Type "exit" or "quit" to leave.  ║');
-    console.log('╚═══════════════════════════════════════════════════════════╝\n');
-
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-      prompt: 'talon> ',
-    });
-
-    rl.prompt();
-
-    rl.on('line', async (line) => {
-      const trimmed = line.trim();
-      if (trimmed === 'exit' || trimmed === 'quit') {
-        console.log('👋 Session ended. Goodbye!');
-        process.exit(0);
-      }
-
-      if (trimmed.length === 0) {
-        rl.prompt();
-        return;
-      }
-
-      try {
-        const start = Date.now();
-        const result = await router.executeFastPath({
-          sessionId,
-          input: trimmed,
-          history,
-        });
-
-        console.log(`\n${result.output}\n`);
-        console.log(
-          `[⚡ ${Date.now() - start}ms | ${result.tokensUsed.totalTokens} tokens | Skills: ${result.retrievedSkills.map((s) => s.name).join(', ') || 'none'}]\n`
-        );
-
-        history.push({ role: 'user', content: trimmed });
-        history.push({ role: 'assistant', content: result.output });
-      } catch (err: unknown) {
-        console.error('❌ Error:', err instanceof Error ? err.message : String(err));
-      }
-
-      rl.prompt();
-    });
+    startInteractiveChat();
   });
 
 // 4. `talon serve`

@@ -1415,21 +1415,258 @@ export function getDashboardHtml(): string {
       }
     }
 
+    // 3D Holographic Core Renderer (60FPS Interactive Orbit)
+    function init3DHero() {
+      const canvas = document.getElementById('talon3DHeroCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width;
+      const H = canvas.height;
+      const CX = W / 2;
+      const CY = H / 2;
+
+      let rotX = -0.2;
+      let rotY = 0.4;
+      let targetRotX = -0.2;
+      let targetRotY = 0.4;
+      let isDragging = false;
+      let lastMouseX = 0;
+      let lastMouseY = 0;
+      let pulseTime = 0;
+      let flashIntensity = 0;
+
+      window.pulse3DHero = function(type) {
+        flashIntensity = 1.0;
+      };
+
+      // 40 Ambient Orbit Particles
+      const particles = [];
+      for (let i = 0; i < 40; i++) {
+        particles.push({
+          theta: Math.random() * Math.PI * 2,
+          phi: Math.acos((Math.random() * 2) - 1),
+          dist: 85 + Math.random() * 45,
+          speed: 0.012 + Math.random() * 0.02,
+          size: 1 + Math.random() * 1.8,
+          color: Math.random() > 0.5 ? '#00f2fe' : '#d946ef'
+        });
+      }
+
+      // 5 Talon Claws scaled for 140px widget
+      const clawSegments = [
+        { baseAngle: 0, length: 95, curvature: 0.65, color: '#38bdf8' },
+        { baseAngle: (Math.PI * 2) / 3, length: 90, curvature: 0.6, color: '#00f2fe' },
+        { baseAngle: (Math.PI * 4) / 3, length: 90, curvature: 0.6, color: '#d946ef' },
+        { baseAngle: (Math.PI / 3), length: 75, curvature: 0.5, color: '#818cf8' },
+        { baseAngle: (Math.PI * 5) / 3, length: 75, curvature: 0.5, color: '#c084fc' }
+      ];
+
+      function project(x, y, z) {
+        const cosY = Math.cos(rotY);
+        const sinY = Math.sin(rotY);
+        const x1 = x * cosY - z * sinY;
+        const z1 = z * cosY + x * sinY;
+
+        const cosX = Math.cos(rotX);
+        const sinX = Math.sin(rotX);
+        const y2 = y * cosX - z1 * sinX;
+        const z2 = z1 * cosX + y * sinX;
+
+        const fov = 400;
+        const scale = fov / (fov + z2 + 150);
+        return { x: CX + x1 * scale, y: CY + y2 * scale, scale: scale, z: z2 };
+      }
+
+      function drawRing(rx, ry, tilt, color, dash) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash(dash);
+        ctx.lineWidth = 1.8;
+        ctx.strokeStyle = color;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = color;
+
+        for (let a = 0; a <= Math.PI * 2; a += 0.15) {
+          const x = rx * Math.cos(a);
+          const y = ry * Math.sin(a) * Math.cos(tilt) - rx * Math.sin(a) * Math.sin(tilt);
+          const z = ry * Math.sin(a) * Math.sin(tilt) + rx * Math.cos(a) * Math.cos(tilt);
+          const p = project(x, y, z);
+          if (a === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawClaw(claw, time) {
+        const segments = 4;
+        const baseDist = 65;
+        const angle = claw.baseAngle + Math.sin(time * 0.8) * 0.05;
+        const pts = [];
+
+        for (let s = 0; s <= segments; s++) {
+          const ratio = s / segments;
+          const r = baseDist + ratio * 45;
+          const theta = angle + ratio * claw.curvature;
+          const x = r * Math.cos(theta);
+          const y = -75 + ratio * 85;
+          const z = r * Math.sin(theta);
+          pts.push(project(x, y, z));
+        }
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.lineWidth = 7 * pts[0].scale;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#1e293b';
+        ctx.stroke();
+
+        ctx.lineWidth = 3 * pts[0].scale;
+        ctx.strokeStyle = '#475569';
+        ctx.stroke();
+
+        const tip = pts[pts.length - 1];
+        ctx.beginPath();
+        ctx.arc(tip.x, tip.y, 4 * tip.scale, 0, Math.PI * 2);
+        ctx.fillStyle = claw.color;
+        ctx.shadowBlur = 10 * tip.scale;
+        ctx.shadowColor = claw.color;
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function render() {
+        pulseTime += 0.035;
+        if (flashIntensity > 0) flashIntensity -= 0.02;
+
+        if (!isDragging) {
+          targetRotY += 0.007;
+          targetRotX = -0.2 + Math.sin(pulseTime * 0.5) * 0.1;
+        }
+        rotX += (targetRotX - rotX) * 0.1;
+        rotY += (targetRotY - rotY) * 0.1;
+
+        ctx.clearRect(0, 0, W, H);
+
+        // Radial glow
+        const glowRad = ctx.createRadialGradient(CX, CY, 0, CX, CY, 130);
+        glowRad.addColorStop(0, 'rgba(0, 242, 254, 0.15)');
+        glowRad.addColorStop(0.5, 'rgba(217, 70, 239, 0.08)');
+        glowRad.addColorStop(1, 'transparent');
+        ctx.fillStyle = glowRad;
+        ctx.fillRect(0, 0, W, H);
+
+        // Orbiting particles
+        for (const p of particles) {
+          p.theta += p.speed;
+          const px = p.dist * Math.sin(p.phi) * Math.cos(p.theta);
+          const py = p.dist * Math.sin(p.phi) * Math.sin(p.theta);
+          const pz = p.dist * Math.cos(p.phi);
+          const proj = project(px, py, pz);
+
+          ctx.beginPath();
+          ctx.arc(proj.x, proj.y, p.size * proj.scale, 0, Math.PI * 2);
+          ctx.fillStyle = p.color;
+          ctx.shadowBlur = 6;
+          ctx.shadowColor = p.color;
+          ctx.fill();
+        }
+
+        // Fast & Slow Path Orbital Rings
+        const fastGlow = Math.sin(pulseTime * 3) * 0.15 + (flashIntensity * 0.4);
+        drawRing(75, 28, -0.4, 'rgba(0, 242, 254, ' + (0.7 + fastGlow) + ')', [12, 8]);
+        drawRing(75, 28, 0.5, 'rgba(217, 70, 239, ' + (0.7 + fastGlow) + ')', [12, 8]);
+
+        // Central Singularity Core
+        const coreProj = project(0, 0, 0);
+        const coreRad = (18 + Math.sin(pulseTime * 2) * 2.5 + flashIntensity * 8) * coreProj.scale;
+        const coreGrad = ctx.createRadialGradient(coreProj.x, coreProj.y, 0, coreProj.x, coreProj.y, coreRad);
+        coreGrad.addColorStop(0, '#ffffff');
+        coreGrad.addColorStop(0.4, '#00f2fe');
+        coreGrad.addColorStop(0.8, '#d946ef');
+        coreGrad.addColorStop(1, 'transparent');
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(coreProj.x, coreProj.y, coreRad, 0, Math.PI * 2);
+        ctx.fillStyle = coreGrad;
+        ctx.shadowBlur = 20 * coreProj.scale;
+        ctx.shadowColor = '#00f2fe';
+        ctx.fill();
+        ctx.restore();
+
+        // 3D Claws
+        for (const claw of clawSegments) {
+          drawClaw(claw, pulseTime);
+        }
+
+        requestAnimationFrame(render);
+      }
+
+      // Drag interaction
+      canvas.addEventListener('mousedown', function(e) {
+        isDragging = true;
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+      });
+
+      window.addEventListener('mousemove', function(e) {
+        if (!isDragging) return;
+        const dx = e.clientX - lastMouseX;
+        const dy = e.clientY - lastMouseY;
+        targetRotY += dx * 0.01;
+        targetRotX += dy * 0.01;
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+      });
+
+      window.addEventListener('mouseup', function() { isDragging = false; });
+
+      canvas.addEventListener('touchstart', function(e) {
+        if (e.touches.length === 1) {
+          isDragging = true;
+          lastMouseX = e.touches[0].clientX;
+          lastMouseY = e.touches[0].clientY;
+        }
+      });
+
+      window.addEventListener('touchmove', function(e) {
+        if (!isDragging || e.touches.length !== 1) return;
+        const dx = e.touches[0].clientX - lastMouseX;
+        const dy = e.touches[0].clientY - lastMouseY;
+        targetRotY += dx * 0.015;
+        targetRotX += dy * 0.015;
+        lastMouseX = e.touches[0].clientX;
+        lastMouseY = e.touches[0].clientY;
+      });
+
+      window.addEventListener('touchend', function() { isDragging = false; });
+
+      render();
+    }
+
     // Live Server-Sent Events (SSE) Bus
     function initLiveEvents() {
       if (!window.EventSource) return;
       try {
         const es = new EventSource('/api/events');
         es.addEventListener('trace', () => {
+          window.pulse3DHero?.('fast');
           loadStats();
           const activeTab = document.querySelector('.tab-content.active')?.id;
           if (activeTab === 'traces') loadTraces();
         });
         es.addEventListener('skill_registered', () => {
+          window.pulse3DHero?.('skill');
           loadStats();
           loadSkills();
         });
         es.addEventListener('evolution_completed', () => {
+          window.pulse3DHero?.('slow');
           loadStats();
           loadSkills();
           const badge = document.getElementById('evolution-status-badge');

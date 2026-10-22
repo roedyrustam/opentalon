@@ -108,7 +108,11 @@ export class DualBrainRouter extends EventEmitter {
       parameters: {
         type: 'object',
         properties: {
-          args: { type: 'object', description: 'Arguments passed to skill' },
+          amount: { type: 'number', description: 'Numeric amount or value' },
+          action: { type: 'string', description: 'Action name or sub-operation' },
+          data: { description: 'Data input or payload' },
+          query: { type: 'string', description: 'Search or filter query' },
+          args: { type: 'object', description: 'General dictionary of arguments passed to skill' },
         },
       },
     }));
@@ -148,9 +152,15 @@ export class DualBrainRouter extends EventEmitter {
         const matchingSkill = retrievedSkills.find((s) => s.name === tc.name);
         if (matchingSkill) {
           const callStart = Date.now();
+          const rawArgs = (tc.args as Record<string, unknown>) || {};
+          const skillArgs: Record<string, unknown> =
+            rawArgs && typeof rawArgs === 'object' && 'args' in rawArgs && typeof rawArgs.args === 'object'
+              ? { ...rawArgs, ...(rawArgs.args as Record<string, unknown>) }
+              : { ...rawArgs };
+
           const sandboxedResult = await this.sandbox.execute({
             code: matchingSkill.code,
-            args: tc.args,
+            args: skillArgs,
             capabilities: matchingSkill.capabilities,
             timeoutMs: 5000,
           });
@@ -158,7 +168,7 @@ export class DualBrainRouter extends EventEmitter {
           const durationMs = Date.now() - callStart;
           toolCallsMade.push({
             toolName: tc.name,
-            args: tc.args,
+            args: skillArgs,
             result: sandboxedResult.data ?? sandboxedResult.error,
             durationMs,
           });
@@ -182,8 +192,30 @@ export class DualBrainRouter extends EventEmitter {
             } catch {
               finalOutput = `Execution of ${tc.name} failed: ${sandboxedResult.error}`;
             }
-          } else if (!finalOutput) {
-            finalOutput = `Executed ${tc.name}: ${JSON.stringify(sandboxedResult.data)}`;
+          } else if (sandboxedResult.success) {
+            try {
+              const followUp = await this.llm.generateContent({
+                systemInstruction: systemPrompt,
+                messages: [
+                  ...budgetedMessages,
+                  { role: 'assistant', content: `Invoked tool ${tc.name}` },
+                  {
+                    role: 'user',
+                    content: `[Tool Result for ${tc.name}]: ${JSON.stringify(sandboxedResult.data)}. Synthesize a natural, helpful, and concise answer for the user based on this result.`,
+                  },
+                ],
+                maxTokens: 500,
+              });
+              if (followUp.content) {
+                finalOutput = followUp.content;
+              } else if (!finalOutput) {
+                finalOutput = `Executed ${tc.name}: ${JSON.stringify(sandboxedResult.data)}`;
+              }
+            } catch {
+              if (!finalOutput) {
+                finalOutput = `Executed ${tc.name}: ${JSON.stringify(sandboxedResult.data)}`;
+              }
+            }
           }
         }
       }
