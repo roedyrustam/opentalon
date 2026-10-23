@@ -17,6 +17,8 @@ import {
   McpToolBridge,
   SwarmDirector,
   CronScheduler,
+  ContextCacheManager,
+  ThinkingBudgetCalculator,
   type ChatMessage,
   type ILLMPort,
   type CascadeProvider,
@@ -157,7 +159,17 @@ function getComponents(dbPath = 'opentalon.db') {
 
   const evolutionEngine = new EvolutionEngine(memory, sandbox, llm);
   const mcpServer = new McpServer(memory, sandbox);
-  const swarmDirector = new SwarmDirector(llm);
+
+  // Configure asymmetric worker LLM (Gemini 3.8 Flash) for high-throughput swarm delegation
+  let workerLLM: ILLMPort | undefined;
+  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
+    workerLLM = new GeminiDriver({
+      primaryModel: process.env.GEMINI_WORKER_MODEL || 'gemini-3.8-flash',
+      fallbackModel: 'gemini-3.5-flash-lite',
+    });
+  }
+
+  const swarmDirector = new SwarmDirector(llm, workerLLM);
   const scheduler = new CronScheduler({ memory, router, sandbox });
 
   return { memory, sandbox, llm, router, evolutionEngine, mcpServer, swarmDirector, scheduler };
@@ -220,6 +232,7 @@ async function startInteractiveChat() {
 
   const sessionId = `repl_${Date.now()}`;
   const history: ChatMessage[] = [];
+  let enableGrounding = false;
 
   const cyan = '\x1b[36m';
   const green = '\x1b[32m';
@@ -277,6 +290,7 @@ ${cyan}╚═══════════════════════�
         console.log(`
 ${bold}OpenTalon REPL Slash Commands:${reset}
   ${yellow}/help, /?${reset}               Show this commands guide
+  ${yellow}/grounding${reset}              Toggle native Google Search Grounding on/off
   ${yellow}/skills${reset}                 List all active procedural skills in sandbox
   ${yellow}/facts${reset}                  List long-term semantic facts & user preferences
   ${yellow}/addfact <key>=<val>${reset}   Store a new semantic rule or preference
@@ -475,6 +489,13 @@ ${bold}OpenTalon REPL Slash Commands:${reset}
         return;
       }
 
+      if (cmd === 'grounding' || cmd === 'search') {
+        enableGrounding = !enableGrounding;
+        console.log(`\n🌐 Google Search Grounding is now ${enableGrounding ? `${green}ENABLED${reset}` : `${yellow}DISABLED${reset}`}.\n`);
+        rl.prompt();
+        return;
+      }
+
       console.log(`⚠️ Unknown slash command: "/${cmd}". Type ${yellow}/help${reset} for list of commands.`);
       rl.prompt();
       return;
@@ -487,9 +508,22 @@ ${bold}OpenTalon REPL Slash Commands:${reset}
         sessionId,
         input: trimmed,
         history,
+        enableSearchGrounding: enableGrounding,
       });
 
       console.log(`\n${result.output}\n`);
+
+      if (result.groundingMetadata?.sources && result.groundingMetadata.sources.length > 0) {
+        console.log(`${cyan}🌐 Verified Google Search Sources:${reset}`);
+        for (const src of result.groundingMetadata.sources) {
+          console.log(`  • ${src.title} (${dim}${src.url}${reset})`);
+        }
+        console.log('');
+      }
+
+      if (result.cachedContentUsed) {
+        console.log(`${dim}[💾 Cache Hit: ${result.cachedContentUsed}]${reset}`);
+      }
 
       const skillsStr = result.retrievedSkills.length > 0
         ? result.retrievedSkills.map((s) => s.name).join(', ')
@@ -537,9 +571,10 @@ program
   .command('run [prompt]')
   .description('Execute a single Fast Path agent turn (<1,500 token budget) or start interactive chat if omitted')
   .option('-s, --session <id>', 'Session identifier', `session_${Date.now()}`)
+  .option('-g, --grounding', 'Enable native Google Search Grounding for verified real-time web knowledge', false)
   .option('--stream', 'Stream response tokens with typing pacing to stdout', false)
   .option('--json', 'Output machine-readable JSON result', false)
-  .action(async (prompt: string | undefined, options: { session: string; stream: boolean; json: boolean }) => {
+  .action(async (prompt: string | undefined, options: { session: string; stream: boolean; json: boolean; grounding: boolean }) => {
     if (!prompt) {
       console.log('💡 No prompt provided. Entering OpenTalon interactive chat...\n');
       return startInteractiveChat();
@@ -547,7 +582,7 @@ program
 
     const { router } = getComponents();
     if (!options.json) {
-      console.log(`\n🤖 [Fast Path] Input: "${prompt}" (Session: ${options.session})`);
+      console.log(`\n🤖 [Fast Path] Input: "${prompt}" (Session: ${options.session})${options.grounding ? ' [Search Grounding Enabled]' : ''}`);
     }
     const start = Date.now();
 
@@ -555,6 +590,7 @@ program
       const result = await router.executeFastPath({
         sessionId: options.session,
         input: prompt,
+        enableSearchGrounding: options.grounding,
       });
 
       if (options.json) {
@@ -586,6 +622,15 @@ program
       console.log(
         `📊 Tokens: ${result.tokensUsed.totalTokens} (Prompt: ${result.tokensUsed.promptTokens}, Completion: ${result.tokensUsed.completionTokens})`
       );
+      if (result.cachedContentUsed) {
+        console.log(`💾 Context Cache Hit: ${result.cachedContentUsed}`);
+      }
+      if (result.groundingMetadata?.sources && result.groundingMetadata.sources.length > 0) {
+        console.log(`\n🌐 Verified Google Search Sources:`);
+        for (const src of result.groundingMetadata.sources) {
+          console.log(`  • ${src.title} (${src.url})`);
+        }
+      }
       if (result.retrievedSkills.length > 0) {
         console.log(
           `🛠️ Retrieved Skills: ${result.retrievedSkills.map((s) => s.name).join(', ')}`
@@ -675,16 +720,19 @@ program
   .command('evolve')
   .description('Run an autonomous Slow Path evolution cycle (Hermes reflection & auto-patching)')
   .option('-l, --limit <number>', 'Maximum traces to inspect', '100')
+  .option('-s, --speculative <count>', 'Number of parallel speculative candidate drafts to benchmark in sandbox (1-5)', '1')
   .option('--dry-run', 'Inspect opportunities and validate synthesis in sandbox without committing to database', false)
   .option('--json', 'Output machine-readable JSON evolution report', false)
-  .action(async (options: { limit: string; dryRun: boolean; json: boolean }) => {
+  .action(async (options: { limit: string; speculative: string; dryRun: boolean; json: boolean }) => {
     const limit = parseInt(options.limit, 10);
+    const speculativeDraftCount = parseInt(options.speculative || '1', 10);
     const { evolutionEngine } = getComponents();
 
     const start = Date.now();
     const report = await evolutionEngine.runEvolutionCycle({
       traceLimit: limit,
       dryRun: options.dryRun,
+      speculativeDraftCount,
     });
 
     if (options.json) {
@@ -1688,6 +1736,214 @@ cronCommand
       );
     }
     console.log('');
+  });
+
+// 12. `talon cache` & `talon booster`
+const cacheCommand = program
+  .command('cache')
+  .description('Manage Gemini autonomous context caching and prompt prefixes');
+
+cacheCommand
+  .command('status')
+  .description('Check Gemini context caching configuration and active thresholds')
+  .action(() => {
+    console.log(`
+🧠 Gemini Autonomous Context Caching (2026 Edition):
+  • Min Threshold : 32,768 tokens (~120k characters)
+  • Default TTL   : 3,600s (1 hour)
+  • Cost Savings  : 75% to 90% discount on cached input tokens
+  • Invalidation  : Automatic SHA-256 content drift detection
+  • Active Model  : ${process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite / gemini-4-pro'}
+`);
+  });
+
+const boosterCommand = program
+  .command('booster')
+  .description('Gemini Agent Booster v0.3.0 — O(1) Thinking Budget Evaluator & Canonical KV-Cache Inspector');
+
+boosterCommand
+  .command('evaluate <prompt...>')
+  .description('Evaluate task entropy score, thinking tier, and System-2 thinkingBudget for a prompt')
+  .option('-t, --tools <count>', 'Simulated number of active tools', '0')
+  .option('-r, --retry', 'Simulate sandbox self-correction retry escalation', false)
+  .action((promptParts: string[], options: { tools: string; retry: boolean }) => {
+    const input = promptParts.join(' ');
+    const toolCount = parseInt(options.tools || '0', 10);
+    const result = ThinkingBudgetCalculator.evaluate({
+      input,
+      toolCount,
+      isRetry: Boolean(options.retry),
+    });
+
+    console.log(`
+🚀 Gemini Agent Booster — Task Entropy Evaluation:
+  • Input Prompt   : "${input}"
+  • Entropy Score  : ${result.entropyScore} / 100
+  • Reasoning Tier : ${result.tier.toUpperCase()} (${result.mode} mode)
+  • Thinking Budget: ${result.thinkingBudget.toLocaleString()} tokens
+  • Active Signals : ${result.reasons.join(', ')}
+`);
+  });
+
+boosterCommand
+  .command('status')
+  .description('Query live booster & KV-cache telemetry from running daemon (or local config)')
+  .action(async () => {
+    try {
+      const res = await fetch('http://127.0.0.1:3100/api/booster/stats');
+      if (res.ok) {
+        const stats = (await res.json()) as Record<string, unknown>;
+        console.log(`
+⚡ Live Daemon Gemini Agent Booster Telemetry (http://127.0.0.1:3100):
+  • Fast Path Turns       : ${stats.fastPathTurnsCount ?? 0}
+  • Avg Thinking Budget   : ${stats.avgThinkingBudget ?? 0} tokens
+  • Tracked Prefixes      : ${stats.trackedPrefixes ?? 0} (Max 200 LRU)
+  • Canonical Prefix Hits : ${stats.prefixHits ?? 0}
+  • Explicit Cache Hits   : ${stats.cacheHits ?? 0}
+  • Est. Tokens Saved     : ${stats.estimatedTokensSaved ?? 0} tokens
+`);
+        return;
+      }
+    } catch {
+      // Daemon not reachable or not updated yet
+    }
+    console.log(`
+⚡ Gemini Agent Booster v0.3.0 (Configuration):
+  • Thinking Budget Engine: Active (O(1) Zero-Latency Heuristic)
+  • Canonical Prefix Sort : Active (Alphabetical Tool + Fact SHA-256 Pinning)
+  • Explicit Cache Floor  : 32,768 tokens (75%–90% discount)
+  • Fallback Invariant    : gemini-4-pro / gemini-4-argon -> gemini-3.8-flash
+`);
+  });
+
+// 12c. `talon finops`
+program
+  .command('finops')
+  .description('Inspect Sovereign FinOps Cost Envelope, per-model token spend, and KV-cache USD savings')
+  .action(async () => {
+    try {
+      const res = await fetch('http://127.0.0.1:3100/api/finops/report');
+      if (res.ok) {
+        const rep = (await res.json()) as Record<string, any>;
+        console.log(`
+💰 OpenTalon Sovereign FinOps Report (Live Daemon):
+  • Total LLM Calls      : ${rep.totalCalls ?? 0}
+  • Prompt Tokens        : ${(rep.totalPromptTokens ?? 0).toLocaleString()}
+  • Completion Tokens    : ${(rep.totalCompletionTokens ?? 0).toLocaleString()}
+  • System-2 Thinking    : ${(rep.totalThinkingTokens ?? 0).toLocaleString()}
+  • KV-Cache Saved Tokens: ${(rep.totalCachedTokensSaved ?? 0).toLocaleString()}
+  • Estimated Spend (USD): $${Number(rep.totalEstimatedCostUsd ?? 0).toFixed(6)}
+  • Estimated Saved (USD): $${Number(rep.totalEstimatedSavingsUsd ?? 0).toFixed(6)}
+  • Daily Envelope Usage : ${rep.budgetUtilizationPct ?? 0}% (Frugal Throttle: ${rep.frugalThrottleActive ? 'ACTIVE' : 'OFF'})
+`);
+        return;
+      }
+    } catch {
+      // Daemon offline or older version
+    }
+    console.log(`
+💰 OpenTalon Sovereign FinOps Governance:
+  • Daily Token Envelope : 2,000,000 tokens / day
+  • Daily Cost Ceiling   : $5.00 USD / day
+  • Frugal Throttle Gate : 80% utilization (auto-caps thinkingBudget <= 2,048)
+  • KV-Cache Discount    : 75% to 90% on canonical prefix & cachedContent hits
+`);
+  });
+
+// 13. `talon analyze [dir]` (Monolithic Whole-Repo Ingestion & Gemini Context Caching)
+program
+  .command('analyze [dir]')
+  .description('Perform whole-repo monolithic AST and codebase ingestion with Gemini 4 Pro 2M+ Context Caching')
+  .option('-m, --model <model>', 'Target reasoning model', 'gemini-4-pro')
+  .option('--ttl <seconds>', 'Context cache TTL in seconds', '3600')
+  .action(async (dir = '.', options: { model: string; ttl: string }) => {
+    console.log(`\n🔍 [Monolithic Codebase Analysis] Ingesting workspace: "${dir}"...`);
+    const ttlSeconds = parseInt(options.ttl, 10);
+    const targetModel = options.model;
+
+    const ignoredDirs = new Set(['node_modules', '.git', 'dist', '.cache', 'coverage', '.turbo', '.next']);
+    const allowedExts = new Set([
+      '.ts', '.js', '.mjs', '.json', '.md', '.sql', '.yaml', '.yml', '.env.example', '.html', '.css'
+    ]);
+
+    const collectedFiles: Array<{ relPath: string; content: string }> = [];
+
+    function scan(currentPath: string) {
+      const entries = fs.readdirSync(currentPath, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          if (!ignoredDirs.has(entry.name)) {
+            scan(path.join(currentPath, entry.name));
+          }
+        } else if (entry.isFile()) {
+          const ext = path.extname(entry.name).toLowerCase();
+          if (allowedExts.has(ext)) {
+            const fullPath = path.join(currentPath, entry.name);
+            try {
+              const stat = fs.statSync(fullPath);
+              if (stat.size < 500 * 1024) {
+                const content = fs.readFileSync(fullPath, 'utf8');
+                const relPath = path.relative(dir, fullPath).replace(/\\/g, '/');
+                collectedFiles.push({ relPath, content });
+              }
+            } catch {
+              // Ignore unreadable files
+            }
+          }
+        }
+      }
+    }
+
+    try {
+      scan(path.resolve(dir));
+    } catch (err: unknown) {
+      console.error(`❌ Scan failed:`, err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
+
+    console.log(`📂 Ingested ${collectedFiles.length} source files.`);
+
+    let monolithicDump = `=== MONOLITHIC CODEBASE DUMP: ${path.resolve(dir)} ===\n\n`;
+    for (const f of collectedFiles) {
+      monolithicDump += `--- FILE: ${f.relPath} ---\n${f.content}\n\n`;
+    }
+
+    const approxTokens = Math.ceil(monolithicDump.length / 3.8);
+    console.log(`📊 Total Payload: ${monolithicDump.length.toLocaleString()} characters (~${approxTokens.toLocaleString()} tokens).`);
+
+    if (!process.env.GEMINI_API_KEY && !process.env.GOOGLE_API_KEY) {
+      console.log(`\n⚠️ GEMINI_API_KEY is not set. Context Caching requires a valid Google Gemini API key.`);
+      console.log(`💡 Export GEMINI_API_KEY="your-key" to pin this monolithic dump to Google Generative Language API.\n`);
+      return;
+    }
+
+    const driver = new GeminiDriver({
+      primaryModel: targetModel,
+      fallbackModel: 'gemini-3.8-flash',
+    });
+
+    const cacheManager = new ContextCacheManager({
+      driver,
+      minTokenThreshold: 1000,
+    });
+
+    console.log(`🧠 Pinning monolithic context to Gemini API (${targetModel}) with TTL ${ttlSeconds}s...`);
+    const cacheName = await cacheManager.getOrCreateCache(monolithicDump, {
+      model: targetModel,
+      ttlSeconds,
+      displayName: `talon_repo_${path.basename(path.resolve(dir))}`,
+    });
+
+    if (cacheName) {
+      console.log(`\n✅ Context Cache Created Successfully!`);
+      console.log(`   Cache ID : ${cacheName}`);
+      console.log(`   Model    : ${targetModel} (2M+ Monolithic Context)`);
+      console.log(`   Discount : 75%–90% cost reduction on subsequent turns`);
+      console.log(`   TTL      : ${ttlSeconds}s (${Math.round(ttlSeconds / 60)} minutes)\n`);
+      console.log(`💡 Tip: The whole repository is now cached in Google AI infrastructure with zero loss!\n`);
+    } else {
+      console.log(`⚠️ Context Cache could not be provisioned (Check API permissions or model availability).\n`);
+    }
   });
 
 program.parse(process.argv);

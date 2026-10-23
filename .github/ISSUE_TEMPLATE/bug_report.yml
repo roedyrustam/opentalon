@@ -1,0 +1,48 @@
+name: 🐛 Bug Report / Laporan Bug
+description: Report a bug, regression, or unexpected behavior in OpenTalon / Laporkan bug pada OpenTalon.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve **OpenTalon**! Please fill out the details below so maintainers and contributors can reproduce the issue quickly.
+  - type: dropdown
+    id: package
+    attributes:
+      label: Affected Package / Paket Terdampak
+      options:
+        - "@opentalon/core (Router, Drivers, Booster, FinOps, Evolution)"
+        - "@opentalon/memory (LibSQL Episodic, Vector RAG, Semantic Graph)"
+        - "@opentalon/skill-engine (SKILL.md Loader, Sandbox VM, Security Gate)"
+        - "@opentalon/gateway (SSE Server, Web Dashboard, WhatsApp/Telegram)"
+        - "talon (CLI & TUI)"
+        - "Documentation / Setup"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description / Deskripsi Masalah
+      description: Clear and concise description of what happened vs. what you expected.
+      placeholder: "When calling DualBrainRouter.processPrompt with multimodal attachments..."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce / Langkah Reproduksi
+      description: Minimal steps or command sequence to reproduce the bug.
+      placeholder: |
+        1. Run `pnpm talon serve`
+        2. Send POST request to `/api/chat` with ...
+        3. Observe error ...
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment (OS, Node.js, Model Provider)
+      placeholder: "Windows 11 / Ubuntu 24.04, Node v22.12.0, Gemini 4 Argon / DeepSeek"
+    validations:
+      required: true

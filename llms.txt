@@ -1,0 +1,34 @@
+# OpenTalon — Sovereign Self-Evolving AI Agent Framework
+
+> OpenTalon is an open-source, TypeScript-native AI Agent Framework combining OpenClaw's multi-channel gateway & SKILL.md ecosystem, Hermes Agent's closed-loop self-evolution & 3-tier memory, and the Gemini Agent Booster 5-Pillar Engine (Dynamic Thinking Budget, Canonical SHA-256 KV-Cache, Native Multimodal Vision/PDF/Audio, Autonomous Grounded Research Memory, Speculative Multi-Draft Evolution, and Sovereign FinOps Cost Guard).
+
+- Repository: https://github.com/roedyrustam/opentalon
+- License: MIT
+- Runtime: Node.js >= 22, TypeScript 5.8+, pnpm workspaces
+
+## Core Architecture & Packages
+
+- `@opentalon/core` (`packages/core`):
+  - `DualBrainRouter`: Orchestrates Fast Reflex vs. Deep Planner models, tool calling loops, grounded research persistence, and FinOps frugal throttling.
+  - `ThinkingBudgetCalculator`: O(1) heuristic prompt entropy scorer (`0..100`) mapping requests to `NONE`, `MINIMAL`, `LOW`, `MEDIUM`, `HIGH`, or `MAX` thinking budgets (`0` to `65,536` tokens).
+  - `TokenBudgeter` & `ContextCacheManager`: Canonical tool/fact sorting, SHA-256 prefix hashing, automatic Gemini `cachedContents` lifecycle after 2 identical prefix hits, and automatic model availability fallback (`gemini-4-pro` / `gemini-4-argon` -> `gemini-3.8-flash`).
+  - `FinOpsBudgetTracker`: Per-model USD cost tracking, KV-cache USD savings calculation, and automatic Frugal Mode when daily spend reaches >= 80% of budget.
+  - `EvolutionEngine`: Closed-loop skill synthesis (`evolveOpportunity`) and speculative multi-draft tournament evolution (`evolveOpportunitySpeculative`) across parallel temperatures `0.1`–`0.9`.
+  - `SwarmCoordinator`: Multi-agent delegation across specialized subagent roles.
+- `@opentalon/memory` (`packages/memory`):
+  - 3-Tier Unified LibSQL Memory (`UnifiedMemoryManager`): Tier-1 Episodic FTS5 sessions, Tier-2 Vector RAG (`F32_BLOB` cosine similarity), and Tier-3 Semantic Knowledge Graph (`semantic_facts`).
+- `@opentalon/skill-engine` (`packages/skill-engine`):
+  - Zero-Trust `SecurityGate` (12 static vulnerability patterns + prompt injection sanitizer) and `SandboxedVmRunner` (`node:vm` isolated execution with strict timeout & memory caps).
+  - Native `SKILL.md` parser compatible with OpenClaw and Hermes skills.
+- `@opentalon/gateway` (`packages/gateway`):
+  - Real-time SSE streaming server, interactive Web Control Plane Dashboard with multimodal drag/attach support, WhatsApp/Telegram webhook adapters, and REST endpoints (`/api/chat`, `/api/booster/stats`, `/api/finops/report`).
+- `talon` (`packages/cli`):
+  - Developer CLI & TUI (`talon chat`, `talon serve`, `talon evolve --speculative 3`, `talon booster`, `talon finops`, `talon stats`, `talon doctor`).
+
+## Quick Links for AI Agents & Contributors
+
+- Main Documentation: [README.md](https://github.com/roedyrustam/opentalon/blob/main/README.md)
+- Contributor Guide: [CONTRIBUTING.md](https://github.com/roedyrustam/opentalon/blob/main/CONTRIBUTING.md)
+- Architecture Blueprint: [BLUEPRINT.md](https://github.com/roedyrustam/opentalon/blob/main/BLUEPRINT.md)
+- Product Requirements: [PRD.md](https://github.com/roedyrustam/opentalon/blob/main/PRD.md)
+- Changelog: [CHANGELOG.md](https://github.com/roedyrustam/opentalon/blob/main/CHANGELOG.md)

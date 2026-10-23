@@ -8,7 +8,7 @@ class TestMockDriver implements ILLMPort {
   public responseModel = 'test-model';
   public callsMade = 0;
 
-  public async generateContent(request: LLMRequest): Promise<LLMResponse> {
+  public async generateContent(_request: LLMRequest): Promise<LLMResponse> {
     this.callsMade++;
     if (this.shouldFail) {
       throw new Error(this.failErrorMessage);
@@ -20,7 +20,7 @@ class TestMockDriver implements ILLMPort {
     };
   }
 
-  public async createEmbedding(text: string): Promise<number[]> {
+  public async createEmbedding(_text: string): Promise<number[]> {
     if (this.shouldFail) {
       throw new Error('Embedding failed');
     }

@@ -1,0 +1,30 @@
+name: 🧩 Submit a New Skill or Driver / Kontribusi Skill & Driver
+description: Propose or submit a new SKILL.md module, MCP tool, or LLM Driver for the OpenTalon ecosystem.
+title: "[Skill/Driver]: "
+labels: ["skill-hub", "good first issue"]
+body:
+  - type: dropdown
+    id: type
+    attributes:
+      label: Contribution Type / Jenis Kontribusi
+      options:
+        - "New SKILL.md Module (OpenClaw / Hermes Compatible)"
+        - "New LLM Driver (e.g., Anthropic, Groq, Mistral, Local vLLM)"
+        - "New Gateway Adapter (e.g., Discord, Slack, Matrix, Webhook)"
+        - "New Security Pattern for SecurityGate"
+    validations:
+      required: true
+  - type: input
+    id: name
+    attributes:
+      label: Skill / Driver Name
+      placeholder: "e.g., github-pr-auditor or groq-fast-driver"
+    validations:
+      required: true
+  - type: textarea
+    id: overview
+    attributes:
+      label: Capabilities & Sandbox Permissions / Kapabilitas & Izin Sandbox
+      description: Describe what the skill/driver does and what permissions (network, filesystem, timeout) it requires.
+    validations:
+      required: true

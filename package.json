@@ -1,8 +1,26 @@
 {
   "name": "opentalon-monorepo",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "private": true,
-  "description": "OpenTalon - Next-Generation AI Agent Framework combining Hermes self-evolving procedural memory and OpenClaw token frugality with Zero-Trust sandbox",
+  "description": "OpenTalon - Sovereign Self-Evolving AI Agent Framework combining OpenClaw multi-channel gateway, Hermes 3-tier memory, Zero-Trust VM Sandbox, and Gemini Agent Booster 5-Pillar FinOps Engine",
+  "keywords": [
+    "ai-agent",
+    "autonomous-agents",
+    "gemini",
+    "gemini-agent-booster",
+    "mcp",
+    "model-context-protocol",
+    "openclaw",
+    "hermes-agent",
+    "multi-agent-swarm",
+    "zero-trust-sandbox",
+    "self-evolving-agent",
+    "kv-cache",
+    "finops",
+    "libsql",
+    "vector-rag",
+    "typescript"
+  ],
   "author": "Roedy Rustam <roedyrustam.id@gmail.com>",
   "license": "MIT",
   "repository": {

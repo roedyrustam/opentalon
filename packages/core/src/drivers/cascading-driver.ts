@@ -154,6 +154,15 @@ export class CascadingLLMDriver implements ILLMPort {
     }));
   }
 
+  public findDriver<T extends ILLMPort>(predicate: (driver: ILLMPort) => driver is T): T | undefined {
+    for (const p of this.providers) {
+      if (predicate(p.driver)) {
+        return p.driver;
+      }
+    }
+    return undefined;
+  }
+
   public resetCircuitBreaker(providerName?: string): void {
     if (providerName) {
       const h = this.healthMap.get(providerName);

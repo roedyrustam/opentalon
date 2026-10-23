@@ -1,0 +1,40 @@
+name: 🚀 Feature Request / Usulan Fitur
+description: Suggest a new capability, driver integration, or architectural enhancement for OpenTalon.
+title: "[Feat]: "
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: pillar
+    attributes:
+      label: Architectural Domain / Domain Arsitektur
+      options:
+        - "Gemini Agent Booster & KV-Cache Optimization"
+        - "Sovereign FinOps & Token Budgeting"
+        - "LLM Driver / Provider Adapter"
+        - "Zero-Trust Sandbox & Skill Engine"
+        - "3-Tier Memory (Episodic / Vector / Semantic Graph)"
+        - "Multi-Channel Gateway (Web UI, Telegram, WhatsApp, Discord, Slack)"
+        - "Developer Experience (CLI / TUI / SDK)"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Opportunity / Masalah atau Peluang
+      description: What problem does this feature solve?
+      placeholder: "Currently, when running multi-agent swarms across local Ollama and Gemini..."
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution / Solusi yang Diusulkan
+      description: Describe the interface, CLI command, or API contract you envision.
+    validations:
+      required: true
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Willingness to Contribute / Kesediaan Berkontribusi
+      options:
+        - label: I am willing to submit a Pull Request for this feature / Saya bersedia mengirimkan PR untuk fitur ini.

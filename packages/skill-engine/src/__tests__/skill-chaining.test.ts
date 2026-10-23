@@ -56,6 +56,7 @@ describe('Skill Chaining & Procedural Mesh in SandboxedVmRunner', () => {
       capabilities: {
         skills: {
           allowedSkills: ['text_sanitizer'],
+          maxChainDepth: 3,
         },
       },
       callSkill: mockChildSkill,
@@ -80,6 +81,7 @@ describe('Skill Chaining & Procedural Mesh in SandboxedVmRunner', () => {
       capabilities: {
         skills: {
           allowedSkills: ['*'],
+          maxChainDepth: 3,
         },
       },
       callSkill: mockChildSkill,
@@ -104,6 +106,7 @@ describe('Skill Chaining & Procedural Mesh in SandboxedVmRunner', () => {
       capabilities: {
         skills: {
           allowedSkills: ['convert_currency'],
+          maxChainDepth: 3,
         },
       },
       callSkill: mockChild,

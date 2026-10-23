@@ -383,6 +383,16 @@ export function getDashboardHtml(): string {
           <div class="stat-value tabular-nums" id="stat-facts-count">--</div>
           <div class="stat-desc">Zero-Latency System-1 context injection</div>
         </div>
+        <div class="stat-card">
+          <div class="stat-label">KV-Cache &amp; Prefix Saved</div>
+          <div class="stat-value tabular-nums" id="stat-tokens-saved">0 <span style="font-size: 1rem; color: var(--text-muted);">tokens</span></div>
+          <div class="stat-desc" id="stat-cache-hits-desc">Canonical prefix &amp; cachedContent hits: 0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Avg System-2 Thinking</div>
+          <div class="stat-value tabular-nums" id="stat-avg-thinking">0 <span style="font-size: 1rem; color: var(--text-muted);">tokens</span></div>
+          <div class="stat-desc">O(1) Dynamic Entropy Budgeter</div>
+        </div>
       </div>
 
       <div class="card">
@@ -399,8 +409,12 @@ export function getDashboardHtml(): string {
       <div class="card" style="margin-top: 1.5rem;">
         <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
           <span>Autonomous Cognitive Evolution (Hermes Slow Path)</span>
-          <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
             <span id="evolution-status-badge" class="badge badge-success">Idle</span>
+            <select id="evolution-draft-count" class="chat-input" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; width: auto;">
+              <option value="1">1x Single Synthesis</option>
+              <option value="3" selected>3x Speculative Multi-Draft (Sandbox Benchmarked)</option>
+            </select>
             <button class="btn" id="run-evolution-btn" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; background: linear-gradient(135deg, #d946ef, #8b5cf6);" onclick="runManualEvolution()">Trigger Evolution Cycle</button>
           </div>
         </div>
@@ -665,6 +679,7 @@ export function getDashboardHtml(): string {
                 <option value="system_rule">System Rules</option>
                 <option value="domain_knowledge">Domain Knowledge</option>
                 <option value="developer_habit">Developer Habits</option>
+                <option value="grounded_research">Grounded Web Research</option>
               </select>
               <button class="btn" style="padding: 0.4rem 0.75rem; font-size: 0.825rem;" onclick="loadFacts()">Refresh</button>
               <button class="btn" style="background: #334155; padding: 0.4rem 0.75rem; font-size: 0.825rem;" onclick="exportMemorySnapshot()" title="Export JSON memory snapshot">Export</button>
@@ -682,13 +697,37 @@ export function getDashboardHtml(): string {
     <!-- TAB 7: LIVE PLAYGROUND (SSE STREAMING) -->
     <section id="chat" class="tab-content">
       <div class="chat-container">
+        <div style="padding: 0.75rem 1.25rem; background: #0d131f; border-bottom: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div style="display: flex; align-items: center; gap: 1rem; font-size: 0.85rem; flex-wrap: wrap;">
+            <span style="font-weight: 600; color: #f3f4f6;">Live Agent Chat</span>
+            <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; user-select: none;">
+              <input type="checkbox" id="chat-grounding-toggle" style="cursor: pointer;" />
+              <span style="color: #60a5fa; font-weight: 500;">🌐 Google Search Grounding</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.4rem; user-select: none;">
+              <span style="color: #a78bfa; font-weight: 500;">🧠 Thinking Budget:</span>
+              <select id="chat-thinking-mode" class="chat-input" style="padding: 0.2rem 0.5rem; font-size: 0.78rem; width: auto;">
+                <option value="auto">Auto (O(1) Entropy)</option>
+                <option value="fast">Fast (0 - 2K tokens)</option>
+                <option value="balanced">Balanced (8K tokens)</option>
+                <option value="deep">Deep System-2 (32K tokens)</option>
+              </select>
+            </label>
+          </div>
+          <div style="font-size: 0.75rem; color: var(--text-muted);">
+            Fast Path &lt;1,500 tokens | Gemini Agent Booster v0.3.0
+          </div>
+        </div>
         <div class="chat-messages" id="chat-messages">
           <div class="message message-assistant">
             Hello! I am OpenTalon. Ask me anything, or try triggering one of my registered procedural skills (e.g. currency conversion, CSV processing, or statistical calculations).
           </div>
         </div>
+        <div id="chat-attachments-bar" style="display: none; padding: 0.5rem 1.25rem; background: #111827; border-top: 1px solid var(--card-border); gap: 0.5rem; flex-wrap: wrap; align-items: center;"></div>
         <div class="chat-input-bar">
-          <input type="text" id="chat-input" class="chat-input" placeholder="Type a message or instruction..." onkeydown="if(event.key==='Enter') sendMessage()" />
+          <input type="file" id="chat-file-input" accept="image/*,application/pdf,audio/*" multiple style="display: none;" onchange="handleChatFileUpload(event)" />
+          <button class="btn" style="background: #1f2937; border: 1px solid var(--card-border); padding: 0.75rem 1rem;" onclick="document.getElementById('chat-file-input').click()" title="Attach Image, Screenshot, PDF, or Audio for Gemini Multimodal Grounding">📎 Attach</button>
+          <input type="text" id="chat-input" class="chat-input" placeholder="Type a message, attach a screenshot/PDF, or trigger a skill..." onkeydown="if(event.key==='Enter') sendMessage()" />
           <button class="btn" onclick="sendMessage()">Send</button>
         </div>
       </div>
@@ -878,6 +917,21 @@ export function getDashboardHtml(): string {
         document.getElementById('stat-avg-latency').innerHTML = data.avgLatencyMs + ' <span style="font-size: 1rem; color: var(--text-muted);">ms</span>';
         const factsEl = document.getElementById('stat-facts-count');
         if (factsEl) factsEl.innerText = data.factsCount ?? 0;
+        if (data.booster) {
+          const savedEl = document.getElementById('stat-tokens-saved');
+          const hitsDescEl = document.getElementById('stat-cache-hits-desc');
+          const avgThinkEl = document.getElementById('stat-avg-thinking');
+          if (savedEl) {
+            savedEl.innerHTML = (data.booster.estimatedTokensSaved || 0).toLocaleString() + ' <span style="font-size: 1rem; color: var(--text-muted);">tokens</span>';
+          }
+          if (hitsDescEl) {
+            const totalHits = (data.booster.prefixHits || 0) + (data.booster.cacheHits || 0);
+            hitsDescEl.innerText = 'Canonical prefix & cachedContent hits: ' + totalHits;
+          }
+          if (avgThinkEl) {
+            avgThinkEl.innerHTML = (data.booster.avgThinkingBudget || 0).toLocaleString() + ' <span style="font-size: 1rem; color: var(--text-muted);">tokens</span>';
+          }
+        }
       } catch (e) {
         console.error('Failed to load stats', e);
       }
@@ -985,15 +1039,62 @@ export function getDashboardHtml(): string {
     }
 
     let conversationHistory = [];
+    let pendingAttachments = [];
+
+    function handleChatFileUpload(event) {
+      const files = Array.from(event.target.files || []);
+      for (const file of files) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const resultStr = String(reader.result || '');
+          const base64Data = resultStr.replace(/^data:[^;]+;base64,/, '');
+          pendingAttachments.push({
+            name: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            data: base64Data,
+          });
+          renderPendingAttachments();
+        };
+        reader.readAsDataURL(file);
+      }
+      event.target.value = '';
+    }
+
+    function removePendingAttachment(idx) {
+      pendingAttachments.splice(idx, 1);
+      renderPendingAttachments();
+    }
+
+    function renderPendingAttachments() {
+      const bar = document.getElementById('chat-attachments-bar');
+      if (!bar) return;
+      if (pendingAttachments.length === 0) {
+        bar.style.display = 'none';
+        bar.innerHTML = '';
+        return;
+      }
+      bar.style.display = 'flex';
+      bar.innerHTML = pendingAttachments.map((att, idx) =>
+        '<span class="badge badge-blue" style="display: inline-flex; align-items: center; gap: 0.4rem;">📎 ' +
+        escapeHtml(att.name || att.mimeType) +
+        ' <button onclick="removePendingAttachment(' + idx + ')" style="background:none;border:none;color:#fff;cursor:pointer;font-weight:bold;">×</button></span>'
+      ).join('');
+    }
 
     async function sendMessage() {
       const input = document.getElementById('chat-input');
       const text = input.value.trim();
-      if (!text) return;
+      if (!text && pendingAttachments.length === 0) return;
       input.value = '';
+      const currentAttachments = [...pendingAttachments];
+      pendingAttachments = [];
+      renderPendingAttachments();
 
       const container = document.getElementById('chat-messages');
-      container.innerHTML += \`<div class="message message-user">\${escapeHtml(text)}</div>\`;
+      const attachBadgeHtml = currentAttachments.length > 0
+        ? '<div style="margin-top:0.35rem;font-size:0.75rem;opacity:0.85;">' + currentAttachments.map(a => '📎 ' + escapeHtml(a.name || a.mimeType)).join(' &bull; ') + '</div>'
+        : '';
+      container.innerHTML += \`<div class="message message-user">\${escapeHtml(text || '[Multimodal Attachment]')}\${attachBadgeHtml}</div>\`;
       
       const assistantMsg = document.createElement('div');
       assistantMsg.className = 'message message-assistant';
@@ -1001,16 +1102,26 @@ export function getDashboardHtml(): string {
       container.appendChild(assistantMsg);
       container.scrollTop = container.scrollHeight;
 
-      conversationHistory.push({ role: 'user', content: text });
+      conversationHistory.push({ role: 'user', content: text, attachments: currentAttachments.length > 0 ? currentAttachments : undefined });
 
       try {
+        const groundingEnabled = document.getElementById('chat-grounding-toggle')?.checked || false;
+        const thinkingModeSelect = document.getElementById('chat-thinking-mode')?.value || 'auto';
+        let thinkingConfig = undefined;
+        if (thinkingModeSelect === 'fast') thinkingConfig = { thinkingBudget: 0, mode: 'fast' };
+        else if (thinkingModeSelect === 'balanced') thinkingConfig = { thinkingBudget: 8192, mode: 'balanced' };
+        else if (thinkingModeSelect === 'deep') thinkingConfig = { thinkingBudget: 32768, mode: 'deep' };
+
         const response = await fetch('/v1/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            input: text,
+            input: text || 'Analyze the attached multimodal content.',
+            attachments: currentAttachments.length > 0 ? currentAttachments : undefined,
             sessionId: 'dashboard_sess',
             history: conversationHistory.slice(-10),
+            enableSearchGrounding: groundingEnabled,
+            thinkingConfig,
           })
         });
 
@@ -1018,6 +1129,9 @@ export function getDashboardHtml(): string {
         const decoder = new TextDecoder();
         let accumulatedText = '';
         let firstChunk = true;
+        let groundingData = null;
+        let cacheHitId = null;
+        let boosterData = null;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -1039,6 +1153,15 @@ export function getDashboardHtml(): string {
                   assistantMsg.innerText = accumulatedText;
                   container.scrollTop = container.scrollHeight;
                 }
+                if (data.webSearchQueries || data.sources) {
+                  groundingData = data;
+                }
+                if (data.cacheId) {
+                  cacheHitId = data.cacheId;
+                }
+                if (data.thinkingTier !== undefined) {
+                  boosterData = data;
+                }
               } catch (e) {}
             }
           }
@@ -1046,6 +1169,31 @@ export function getDashboardHtml(): string {
         if (accumulatedText) {
           conversationHistory.push({ role: 'assistant', content: accumulatedText });
         }
+
+        // Render Grounding Citations card if present
+        if (groundingData && groundingData.sources && groundingData.sources.length > 0) {
+          let sourcesHtml = '<div style="margin-top: 0.75rem; padding: 0.6rem 0.8rem; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 8px; font-size: 0.8rem;">';
+          const savedFactsNotice = groundingData.groundedFactsSaved ? ' <span class="badge badge-success" style="font-size:0.68rem;margin-left:0.4rem;">+' + groundingData.groundedFactsSaved + ' Auto-Saved to Memory</span>' : '';
+          sourcesHtml += '<div style="font-weight: 600; color: #60a5fa; margin-bottom: 0.35rem;">🌐 Verified Google Search Sources' + savedFactsNotice + '</div>';
+          for (const s of groundingData.sources) {
+            sourcesHtml += '<div style="margin-bottom: 0.25rem;">• <a href="' + escapeHtml(s.url) + '" target="_blank" style="color: #93c5fd; text-decoration: underline;">' + escapeHtml(s.title || s.url) + '</a></div>';
+          }
+          sourcesHtml += '</div>';
+          assistantMsg.innerHTML += sourcesHtml;
+        }
+
+        const badgesHtml = [];
+        if (boosterData) {
+          badgesHtml.push('<span class="badge badge-blue" style="font-size: 0.72rem;">🧠 Thinking: ' + (boosterData.thinkingBudgetUsed || 0).toLocaleString() + ' tokens (' + escapeHtml(boosterData.thinkingTier) + ')</span>');
+        }
+        if (cacheHitId) {
+          const savedTxt = boosterData && boosterData.tokensSaved ? ' • Saved ~' + boosterData.tokensSaved + ' tokens' : '';
+          badgesHtml.push('<span class="badge badge-purple" style="font-size: 0.72rem;">⚡ KV-Cache / Prefix Hit (' + escapeHtml(cacheHitId) + savedTxt + ')</span>');
+        }
+        if (badgesHtml.length > 0) {
+          assistantMsg.innerHTML += '<div style="margin-top: 0.5rem; display: flex; gap: 0.4rem; flex-wrap: wrap;">' + badgesHtml.join('') + '</div>';
+        }
+        loadStats();
       } catch (err) {
         assistantMsg.innerText = 'Error: ' + err.message;
       }
@@ -1550,10 +1698,11 @@ export function getDashboardHtml(): string {
       pre.innerText = 'Scanning episodic traces and extracting heuristics...';
 
       try {
+        const speculativeDraftCount = parseInt(document.getElementById('evolution-draft-count')?.value || '3', 10);
         const res = await fetch('/api/evolution/run', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ limit: 50, dryRun: false }),
+          body: JSON.stringify({ limit: 50, dryRun: false, speculativeDraftCount }),
         });
         const report = await res.json();
         pre.innerText = JSON.stringify(report, null, 2);

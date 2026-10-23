@@ -12,6 +12,8 @@ export interface EvolutionReport {
     version: string;
     type: string;
     hash: string;
+    draftsEvaluated?: number;
+    winningLatencyMs?: number;
   }>;
   skipped: Array<{
     opportunityId: string;
@@ -24,11 +26,19 @@ export interface EvolutionEngineOptions {
   maxRetriesPerOpportunity?: number; // Circuit breaker threshold (default: 2)
   maxSynthesesPerHour?: number;      // FinOps rate limit (default: 5)
   enableSelfHealingRetry?: boolean;  // Self-heal retry with sandbox error feedback (default: true)
+  speculativeDraftCount?: number;    // Number of parallel speculative drafts (default: 1)
 }
 
 export interface EvolutionCycleOptions {
   traceLimit?: number;
   dryRun?: boolean;
+  speculativeDraftCount?: number;
+}
+
+export interface SpeculativeDraftResult {
+  skill: ProceduralSkill;
+  temperature: number;
+  benchmarkMs: number;
 }
 
 export class EvolutionEngine {
@@ -39,6 +49,7 @@ export class EvolutionEngine {
   private maxRetriesPerOpportunity: number;
   private maxSynthesesPerHour: number;
   private enableSelfHealingRetry: boolean;
+  private defaultSpeculativeDraftCount: number;
 
   // Circuit breaker state
   private failedAttempts: Map<string, number> = new Map();
@@ -59,6 +70,7 @@ export class EvolutionEngine {
     this.maxRetriesPerOpportunity = options?.maxRetriesPerOpportunity ?? 2;
     this.maxSynthesesPerHour = options?.maxSynthesesPerHour ?? 5;
     this.enableSelfHealingRetry = options?.enableSelfHealingRetry ?? true;
+    this.defaultSpeculativeDraftCount = options?.speculativeDraftCount ?? 1;
   }
 
   /**
@@ -82,7 +94,7 @@ export class EvolutionEngine {
    * 1. Inspects recent traces & errors.
    * 2. Extracts evolution opportunities via HeuristicsExtractor.
    * 3. Applies FinOps throttling & Circuit Breaker checks.
-   * 4. Uses LLM Reflection (System-2 Thinking) to synthesize or patch skills.
+   * 4. Uses LLM Reflection (System-2 Thinking) or Speculative Multi-Drafting to synthesize skills.
    * 5. Sandbox-tests candidates with optional self-healing retry.
    * 6. Commits verified skills to procedural memory.
    */
@@ -95,6 +107,10 @@ export class EvolutionEngine {
         : optionsOrLimit?.traceLimit ?? 100;
     const dryRun =
       typeof optionsOrLimit === 'object' ? Boolean(optionsOrLimit.dryRun) : false;
+    const draftCount =
+      typeof optionsOrLimit === 'object' && optionsOrLimit.speculativeDraftCount !== undefined
+        ? optionsOrLimit.speculativeDraftCount
+        : this.defaultSpeculativeDraftCount;
 
     const traces = await this.memory.getRecentTraces(traceLimit);
     const opportunities = HeuristicsExtractor.extractOpportunities(traces);
@@ -128,18 +144,36 @@ export class EvolutionEngine {
       }
 
       try {
-        const synthesizedSkill = await this.evolveOpportunity(opp, { dryRun });
-        if (synthesizedSkill) {
-          report.skillsSynthesized.push({
-            name: synthesizedSkill.name,
-            version: synthesizedSkill.version,
-            type: opp.type,
-            hash: synthesizedSkill.hash,
+        if (draftCount > 1) {
+          const specRes = await this.evolveOpportunitySpeculative(opp, {
+            draftCount,
+            dryRun,
           });
-          // Successful evolution: record timestamp for FinOps
-          this.synthesisTimestamps.push(Date.now());
-          // Clear any failure tracking for this opportunity
-          this.failedAttempts.delete(opp.id);
+          if (specRes) {
+            report.skillsSynthesized.push({
+              name: specRes.winner.skill.name,
+              version: specRes.winner.skill.version,
+              type: opp.type,
+              hash: specRes.winner.skill.hash,
+              draftsEvaluated: specRes.validDraftsCount,
+              winningLatencyMs: specRes.winner.benchmarkMs,
+            });
+            this.synthesisTimestamps.push(Date.now());
+            this.failedAttempts.delete(opp.id);
+          }
+        } else {
+          const synthesizedSkill = await this.evolveOpportunity(opp, { dryRun });
+          if (synthesizedSkill) {
+            report.skillsSynthesized.push({
+              name: synthesizedSkill.name,
+              version: synthesizedSkill.version,
+              type: opp.type,
+              hash: synthesizedSkill.hash,
+              draftsEvaluated: 1,
+            });
+            this.synthesisTimestamps.push(Date.now());
+            this.failedAttempts.delete(opp.id);
+          }
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -152,12 +186,73 @@ export class EvolutionEngine {
   }
 
   /**
+   * Speculative Multi-Draft Synthesizer:
+   * Concurrently generates N candidate SKILL.md implementations across varied temperatures,
+   * verifies and benchmarks each candidate in the Zero-Trust Sandbox, and commits the fastest passing winner.
+   */
+  public async evolveOpportunitySpeculative(
+    opp: EvolutionOpportunity,
+    options?: { draftCount?: number; dryRun?: boolean }
+  ): Promise<{ winner: SpeculativeDraftResult; validDraftsCount: number } | null> {
+    const count = Math.max(2, Math.min(5, options?.draftCount ?? 3));
+    const temperatures = [0.1, 0.35, 0.6, 0.8, 0.9].slice(0, count);
+
+    const draftPromises = temperatures.map(async (temp): Promise<SpeculativeDraftResult | null> => {
+      const benchStart = Date.now();
+      const skill = await this.evolveOpportunity(
+        opp,
+        { dryRun: true, temperature: temp },
+        undefined
+      );
+      if (!skill) return null;
+      const benchmarkMs = Math.max(1, Date.now() - benchStart);
+      return {
+        skill,
+        temperature: temp,
+        benchmarkMs,
+      };
+    });
+
+    const settled = await Promise.allSettled(draftPromises);
+    const validDrafts: SpeculativeDraftResult[] = [];
+
+    for (const res of settled) {
+      if (res.status === 'fulfilled' && res.value) {
+        validDrafts.push(res.value);
+      }
+    }
+
+    if (validDrafts.length === 0) {
+      throw new Error(`All ${count} speculative drafts failed sandbox verification.`);
+    }
+
+    // Sort by fastest sandbox verification benchmark, then by concise code length
+    validDrafts.sort((a, b) => {
+      if (a.benchmarkMs !== b.benchmarkMs) {
+        return a.benchmarkMs - b.benchmarkMs;
+      }
+      return a.skill.code.length - b.skill.code.length;
+    });
+
+    const winner = validDrafts[0];
+
+    if (!options?.dryRun) {
+      await this.memory.saveSkill(winner.skill);
+    }
+
+    return {
+      winner,
+      validDraftsCount: validDrafts.length,
+    };
+  }
+
+  /**
    * Evolves a single opportunity by asking the LLM to reflect and draft a verified SKILL.md.
    * Supports an automatic self-healing retry if sandbox verification fails on first attempt.
    */
   public async evolveOpportunity(
     opp: EvolutionOpportunity,
-    options?: { dryRun?: boolean },
+    options?: { dryRun?: boolean; temperature?: number },
     retryState?: { isRetry: boolean; previousError: string }
   ): Promise<ProceduralSkill | null> {
     let reflectionPrompt = `
@@ -189,11 +284,14 @@ Please fix the code logic, parameters, or test cases to ensure strict sandbox pa
 `;
     }
 
+    const thinkingBudget = retryState?.isRetry ? 32768 : 16384;
+
     const llmResponse = await this.llm.generateContent({
       systemInstruction: 'You are an autonomous code synthesizer. Output valid SKILL.md only.',
       messages: [{ role: 'user', content: reflectionPrompt }],
+      temperature: options?.temperature,
       thinkingConfig: {
-        thinkingBudget: 16384, // System-2 Extended Reasoning
+        thinkingBudget, // System-2 Adaptive Extended Reasoning (escalates to 32k on retry)
         mode: 'deep',
       },
     });

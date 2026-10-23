@@ -17,6 +17,11 @@ import {
 } from '@opentalon/skill-engine';
 import { EvolutionEngine, type EvolutionReport } from '../evolution/evolution-engine.js';
 import { TokenBudgeter } from '../token/budgeter.js';
+import { ThinkingBudgetCalculator } from '../token/thinking-budget-calculator.js';
+import { FinOpsBudgetTracker } from '../token/finops-tracker.js';
+import { ContextCacheManager } from '../drivers/context-cache-manager.js';
+import { GeminiDriver } from '../drivers/gemini-driver.js';
+import { CascadingLLMDriver } from '../drivers/cascading-driver.js';
 
 export class DualBrainRouter extends EventEmitter {
   private memory: IMemoryPort;
@@ -24,6 +29,8 @@ export class DualBrainRouter extends EventEmitter {
   private llm: ILLMPort;
   private synthesizer: SkillSynthesizer;
   private evolutionEngine: EvolutionEngine;
+  private cacheManager: ContextCacheManager;
+  private finopsTracker: FinOpsBudgetTracker;
   private maxFastPathTokens: number;
   private enableAsyncEvolution: boolean;
   private evolutionDebounceMs: number;
@@ -34,6 +41,10 @@ export class DualBrainRouter extends EventEmitter {
   private evolutionTimer: NodeJS.Timeout | null = null;
   private isEvolving = false;
 
+  // Booster telemetry tracking
+  private totalThinkingBudgetAllocated = 0;
+  private fastPathTurnsCount = 0;
+
   constructor(config: RouterConfig) {
     super();
     this.memory = config.memory;
@@ -41,6 +52,19 @@ export class DualBrainRouter extends EventEmitter {
     this.llm = config.llm;
     this.synthesizer = config.synthesizer ?? new SkillSynthesizer(this.sandbox);
     this.evolutionEngine = new EvolutionEngine(this.memory, this.sandbox, this.llm);
+    const resolvedGeminiDriver =
+      this.llm instanceof GeminiDriver
+        ? this.llm
+        : this.llm instanceof CascadingLLMDriver
+          ? this.llm.findDriver((d): d is GeminiDriver => d instanceof GeminiDriver)
+          : undefined;
+
+    this.cacheManager =
+      config.cacheManager ??
+      new ContextCacheManager({
+        driver: resolvedGeminiDriver,
+      });
+    this.finopsTracker = config.finopsTracker ?? new FinOpsBudgetTracker();
     this.maxFastPathTokens = config.maxFastPathTokens ?? 1500;
     this.enableAsyncEvolution = config.enableAsyncEvolution ?? true;
     this.evolutionDebounceMs = config.evolutionDebounceMs ?? 5000;
@@ -72,6 +96,28 @@ export class DualBrainRouter extends EventEmitter {
     return this.evolutionEngine;
   }
 
+  public getCacheManager(): ContextCacheManager {
+    return this.cacheManager;
+  }
+
+  public getFinOpsTracker(): FinOpsBudgetTracker {
+    return this.finopsTracker;
+  }
+
+  public getBoosterStats() {
+    const cacheStats = this.cacheManager.getStats();
+    const finops = this.finopsTracker.getReport();
+    return {
+      ...cacheStats,
+      fastPathTurnsCount: this.fastPathTurnsCount,
+      avgThinkingBudget:
+        this.fastPathTurnsCount > 0
+          ? Math.round(this.totalThinkingBudgetAllocated / this.fastPathTurnsCount)
+          : 0,
+      finops,
+    };
+  }
+
   public getTraceQueueLength(): number {
     return this.traceQueue.length;
   }
@@ -81,7 +127,8 @@ export class DualBrainRouter extends EventEmitter {
   }
 
   /**
-   * Fast Path: Frugal, low-latency execution loop (<1,500 tokens/turn).
+   * Fast Path: Frugal, low-latency execution loop (<1,500 tokens/turn)
+   * with Canonical KV-Cache Prefix Pinning & Dynamic System-2 Thinking Budget.
    */
   public async executeFastPath(options: FastPathOptions): Promise<FastPathResult> {
     const startTime = Date.now();
@@ -106,91 +153,151 @@ export class DualBrainRouter extends EventEmitter {
     const topKFacts = options.topKFacts ?? 3;
     const retrievedFacts = await this.memory.searchFacts(input, { topK: topKFacts });
 
-    // 3. Convert retrieved skills to Tool Definitions
-    const tools: ToolDefinition[] = retrievedSkills.map((skill) => ({
+    // 3. Convert retrieved skills to raw Tool Definitions
+    const rawTools: ToolDefinition[] = retrievedSkills.map((skill) => ({
       name: skill.name,
       description: skill.description,
       parameters: {
         type: 'object',
         properties: {
-          amount: { type: 'number', description: 'Numeric amount or value' },
           action: { type: 'string', description: 'Action name or sub-operation' },
+          amount: { type: 'number', description: 'Numeric amount or value' },
+          args: { type: 'object', description: 'General dictionary of arguments passed to skill' },
           data: { description: 'Data input or payload' },
           query: { type: 'string', description: 'Search or filter query' },
-          args: { type: 'object', description: 'General dictionary of arguments passed to skill' },
         },
       },
     }));
 
-    // 4. Token Budget Compression (<1,500 tokens) with Prefix Pinning
-    let systemPrompt =
+    // 4. Deterministic KV-Cache Prefix Pinning (Canonical Sorting of Tools & Facts)
+    const baseSystemInstruction =
       'You are OpenTalon, a precision autonomous agent. Use available tools when appropriate.';
 
-    if (retrievedFacts.length > 0) {
-      const factSnippets = retrievedFacts.map((f) => `• [${f.category}] ${f.key}: ${f.value}`).join('\n');
-      systemPrompt += `\n\nVerified Knowledge Context:\n${factSnippets}`;
+    const { systemPrompt, canonicalTools, prefixHash } = TokenBudgeter.buildCanonicalSystemPrompt(
+      baseSystemInstruction,
+      retrievedFacts,
+      rawTools
+    );
+
+    // 4b. Track Prefix Reuse & Resolve Explicit Gemini Context Cache if >= Threshold
+    const cacheResolution = await this.cacheManager.trackPrefixAndResolveCache(systemPrompt, {
+      prefixHash,
+      systemInstruction: baseSystemInstruction,
+    });
+
+    // 4c. Dynamic System-2 Thinking Budget Calculation (with FinOps Frugal Throttle Guard)
+    let thinkingEval = ThinkingBudgetCalculator.evaluate({
+      input,
+      toolCount: canonicalTools.length,
+      attachmentCount: options.attachments?.length ?? 0,
+      overrideConfig: options.thinkingConfig,
+    });
+
+    if (
+      this.finopsTracker.isFrugalThrottleActive() &&
+      options.thinkingConfig?.thinkingBudget === undefined &&
+      thinkingEval.thinkingBudget > 2048
+    ) {
+      thinkingEval = {
+        ...thinkingEval,
+        tier: 'fast',
+        mode: 'fast',
+        thinkingBudget: 2048,
+        reasons: [...thinkingEval.reasons, 'finops_frugal_throttle_cap'],
+      };
     }
 
+    this.fastPathTurnsCount += 1;
+    this.totalThinkingBudgetAllocated += thinkingEval.thinkingBudget;
+
     const incomingMessages: ChatMessage[] = options.history ? [...options.history] : [];
-    incomingMessages.push({ role: 'user', content: input });
+    incomingMessages.push({
+      role: 'user',
+      content: input,
+      attachments: options.attachments,
+    });
 
     const budgetedMessages = TokenBudgeter.fitWithinBudget(
       incomingMessages,
       systemPrompt,
-      tools,
+      canonicalTools,
       tokenBudget
     );
 
-    // 5. LLM Call
+    // 5. LLM Call with Dynamic Thinking Budget & KV-Cache Pinning
     const llmResponse = await this.llm.generateContent({
       systemInstruction: systemPrompt,
       messages: budgetedMessages,
-      tools: tools.length > 0 ? tools : undefined,
+      tools: canonicalTools.length > 0 ? canonicalTools : undefined,
+      enableSearchGrounding: options.enableSearchGrounding,
+      cachedContentId: cacheResolution.cachedContentId,
+      thinkingConfig:
+        thinkingEval.thinkingBudget > 0
+          ? { thinkingBudget: thinkingEval.thinkingBudget, mode: thinkingEval.mode }
+          : undefined,
     });
 
     const toolCallsMade: FastPathResult['toolCallsMade'] = [];
     let finalOutput = llmResponse.content;
+    let finalThinkingBudgetUsed = thinkingEval.thinkingBudget;
+    let finalThinkingTier = thinkingEval.tier;
 
-    // 6. Execute tool calls inside Zero-Trust Sandbox if triggered
+    // 6. Execute tool calls inside Zero-Trust Sandbox (Concurrent Agentic MoE Dispatch)
     if (llmResponse.toolCalls && llmResponse.toolCalls.length > 0) {
-      for (const tc of llmResponse.toolCalls) {
+      const executeSkillWithMesh = async (
+        skill: ProceduralSkill,
+        args: Record<string, unknown>,
+        currentDepth = 0
+      ): Promise<SandboxExecutionResult> => {
+        return await this.sandbox.execute({
+          code: skill.code,
+          args,
+          capabilities: skill.capabilities,
+          timeoutMs: 5000,
+          chainDepth: currentDepth,
+          callSkill: async (targetSkillName, targetArgs, depth) => {
+            const childSkill = await this.memory.getSkill(targetSkillName);
+            if (!childSkill) {
+              throw new Error(`Chained skill "${targetSkillName}" not found in procedural memory.`);
+            }
+            const childResult = await executeSkillWithMesh(childSkill, targetArgs, depth);
+            if (!childResult.success) {
+              throw new Error(`Chained skill "${targetSkillName}" failed: ${childResult.error}`);
+            }
+            return childResult.data;
+          },
+        });
+      };
+
+      const toolPromises = llmResponse.toolCalls.map(async (tc) => {
         const matchingSkill = retrievedSkills.find((s) => s.name === tc.name);
-        if (matchingSkill) {
-          const callStart = Date.now();
-          const rawArgs = (tc.args as Record<string, unknown>) || {};
-          const skillArgs: Record<string, unknown> =
-            rawArgs && typeof rawArgs === 'object' && 'args' in rawArgs && typeof rawArgs.args === 'object'
-              ? { ...rawArgs, ...(rawArgs.args as Record<string, unknown>) }
-              : { ...rawArgs };
+        if (!matchingSkill) return null;
 
-          const executeSkillWithMesh = async (
-            skill: ProceduralSkill,
-            args: Record<string, unknown>,
-            currentDepth = 0
-          ): Promise<SandboxExecutionResult> => {
-            return await this.sandbox.execute({
-              code: skill.code,
-              args,
-              capabilities: skill.capabilities,
-              timeoutMs: 5000,
-              chainDepth: currentDepth,
-              callSkill: async (targetSkillName, targetArgs, depth) => {
-                const childSkill = await this.memory.getSkill(targetSkillName);
-                if (!childSkill) {
-                  throw new Error(`Chained skill "${targetSkillName}" not found in procedural memory.`);
-                }
-                const childResult = await executeSkillWithMesh(childSkill, targetArgs, depth);
-                if (!childResult.success) {
-                  throw new Error(`Chained skill "${targetSkillName}" failed: ${childResult.error}`);
-                }
-                return childResult.data;
-              },
-            });
-          };
+        const callStart = Date.now();
+        const rawArgs = (tc.args as Record<string, unknown>) || {};
+        const skillArgs: Record<string, unknown> =
+          rawArgs && typeof rawArgs === 'object' && 'args' in rawArgs && typeof rawArgs.args === 'object'
+            ? { ...rawArgs, ...(rawArgs.args as Record<string, unknown>) }
+            : { ...rawArgs };
 
-          const sandboxedResult = await executeSkillWithMesh(matchingSkill, skillArgs, 0);
+        const sandboxedResult = await executeSkillWithMesh(matchingSkill, skillArgs, 0);
+        const durationMs = Date.now() - callStart;
 
-          const durationMs = Date.now() - callStart;
+        return {
+          tc,
+          skillArgs,
+          sandboxedResult,
+          durationMs,
+        };
+      });
+
+      const settled = await Promise.allSettled(toolPromises);
+      const successfulResults: Array<{ name: string; data: unknown }> = [];
+      const failedResults: Array<{ name: string; error: string }> = [];
+
+      for (const res of settled) {
+        if (res.status === 'fulfilled' && res.value) {
+          const { tc, skillArgs, sandboxedResult, durationMs } = res.value;
           toolCallsMade.push({
             toolName: tc.name,
             args: skillArgs,
@@ -198,55 +305,121 @@ export class DualBrainRouter extends EventEmitter {
             durationMs,
           });
 
-          // Adaptive Tool Error Self-Correction
-          if (!sandboxedResult.success) {
-            try {
-              const repair = await this.llm.generateContent({
-                systemInstruction: systemPrompt,
-                messages: [
-                  ...budgetedMessages,
-                  { role: 'assistant', content: `Attempted tool ${tc.name}` },
-                  {
-                    role: 'user',
-                    content: `[Sandbox Error] ${tc.name} execution failed: ${sandboxedResult.error}. Provide helpful resolution.`,
-                  },
-                ],
-                maxTokens: 300,
-              });
-              finalOutput = repair.content || `Execution of ${tc.name} failed: ${sandboxedResult.error}`;
-            } catch {
-              finalOutput = `Execution of ${tc.name} failed: ${sandboxedResult.error}`;
-            }
-          } else if (sandboxedResult.success) {
-            try {
-              const followUp = await this.llm.generateContent({
-                systemInstruction: systemPrompt,
-                messages: [
-                  ...budgetedMessages,
-                  { role: 'assistant', content: `Invoked tool ${tc.name}` },
-                  {
-                    role: 'user',
-                    content: `[Tool Result for ${tc.name}]: ${JSON.stringify(sandboxedResult.data)}. Synthesize a natural, helpful, and concise answer for the user based on this result.`,
-                  },
-                ],
-                maxTokens: 500,
-              });
-              if (followUp.content) {
-                finalOutput = followUp.content;
-              } else if (!finalOutput) {
-                finalOutput = `Executed ${tc.name}: ${JSON.stringify(sandboxedResult.data)}`;
-              }
-            } catch {
-              if (!finalOutput) {
-                finalOutput = `Executed ${tc.name}: ${JSON.stringify(sandboxedResult.data)}`;
-              }
-            }
+          if (sandboxedResult.success) {
+            successfulResults.push({ name: tc.name, data: sandboxedResult.data });
+          } else {
+            failedResults.push({ name: tc.name, error: sandboxedResult.error || 'Execution failed' });
+          }
+        }
+      }
+
+      // Adaptive Tool Self-Correction with System-2 Thinking Escalation
+      if (failedResults.length > 0 && successfulResults.length === 0) {
+        const retryThinkingEval = ThinkingBudgetCalculator.evaluate({
+          input,
+          toolCount: canonicalTools.length,
+          isRetry: true,
+        });
+        finalThinkingBudgetUsed = retryThinkingEval.thinkingBudget;
+        finalThinkingTier = retryThinkingEval.tier;
+
+        try {
+          const repair = await this.llm.generateContent({
+            systemInstruction: systemPrompt,
+            messages: [
+              ...budgetedMessages,
+              { role: 'assistant', content: `Attempted tools: ${failedResults.map((f) => f.name).join(', ')}` },
+              {
+                role: 'user',
+                content: `[Sandbox Error] Execution failed: ${failedResults.map((f) => `${f.name}: ${f.error}`).join('; ')}. Provide helpful resolution.`,
+              },
+            ],
+            maxTokens: 300,
+            cachedContentId: cacheResolution.cachedContentId,
+            thinkingConfig: {
+              thinkingBudget: retryThinkingEval.thinkingBudget,
+              mode: retryThinkingEval.mode,
+            },
+          });
+          finalOutput = repair.content || `Execution failed: ${failedResults.map((f) => `${f.name}: ${f.error}`).join('; ')}`;
+        } catch {
+          finalOutput = `Execution failed: ${failedResults.map((f) => `${f.name}: ${f.error}`).join('; ')}`;
+        }
+      } else if (successfulResults.length > 0) {
+        try {
+          const resultsSummary = successfulResults
+            .map((s) => `[Tool Result for ${s.name}]: ${JSON.stringify(s.data)}`)
+            .join('\n');
+
+          const followUp = await this.llm.generateContent({
+            systemInstruction: systemPrompt,
+            messages: [
+              ...budgetedMessages,
+              { role: 'assistant', content: `Invoked tools: ${successfulResults.map((s) => s.name).join(', ')}` },
+              {
+                role: 'user',
+                content: `${resultsSummary}\nSynthesize a natural, helpful, and concise answer for the user based on these results.`,
+              },
+            ],
+            maxTokens: 500,
+            cachedContentId: cacheResolution.cachedContentId,
+          });
+          if (followUp.content) {
+            finalOutput = followUp.content;
+          } else if (!finalOutput) {
+            finalOutput = resultsSummary;
+          }
+        } catch {
+          if (!finalOutput) {
+            finalOutput = successfulResults
+              .map((s) => `Executed ${s.name}: ${JSON.stringify(s.data)}`)
+              .join('\n');
           }
         }
       }
     }
 
+    // 6b. Autonomous Grounded Research Memory Persistence
+    let groundedFactsSaved = 0;
+    if (
+      options.enableSearchGrounding &&
+      options.autoSaveGroundedFacts !== false &&
+      llmResponse.groundingMetadata?.sources &&
+      llmResponse.groundingMetadata.sources.length > 0
+    ) {
+      const now = Date.now();
+      for (const src of llmResponse.groundingMetadata.sources.slice(0, 5)) {
+        if (!src.url) continue;
+        const factKey = `source:${crypto.createHash('sha256').update(src.url).digest('hex').slice(0, 12)}`;
+        const factValue = `${src.title || 'Verified Web Source'} (${src.url})${src.snippet ? ` — ${src.snippet}` : ''}`;
+        try {
+          await this.memory.saveFact({
+            id: `fact_gnd_${now}_${Math.random().toString(36).slice(2, 7)}`,
+            sessionId,
+            category: 'grounded_research',
+            key: factKey,
+            value: factValue,
+            confidence: 0.95,
+            createdAt: now,
+            updatedAt: now,
+          });
+          groundedFactsSaved += 1;
+        } catch {
+          // Non-blocking if fact persistence fails
+        }
+      }
+    }
+
     const latencyMs = Date.now() - startTime;
+
+    // 6c. Record Turn in Sovereign FinOps Ledger
+    const ledgerEntry = this.finopsTracker.recordTurn({
+      model: llmResponse.model || 'gemini-3.8-flash',
+      promptTokens: llmResponse.tokensUsed.promptTokens,
+      completionTokens: llmResponse.tokensUsed.completionTokens,
+      thinkingBudgetUsed: finalThinkingBudgetUsed,
+      tokensSaved: cacheResolution.tokensSaved,
+    });
 
     // 7. Assemble Episodic Trace
     const trace: EpisodicTrace = {
@@ -283,6 +456,16 @@ export class DualBrainRouter extends EventEmitter {
       toolCallsMade,
       tokensUsed: llmResponse.tokensUsed,
       latencyMs,
+      groundingMetadata: llmResponse.groundingMetadata,
+      groundedFactsSaved: groundedFactsSaved > 0 ? groundedFactsSaved : undefined,
+      cachedContentUsed: llmResponse.cachedContentUsed ?? cacheResolution.cachedContentId,
+      thinkingBudgetUsed: finalThinkingBudgetUsed,
+      thinkingTier: finalThinkingTier,
+      prefixHash: cacheResolution.prefixHash,
+      prefixHit: cacheResolution.prefixHit,
+      tokensSaved: cacheResolution.tokensSaved,
+      estimatedCostUsd: ledgerEntry.estimatedCostUsd,
+      estimatedSavingsUsd: ledgerEntry.estimatedSavingsUsd,
     };
   }
 

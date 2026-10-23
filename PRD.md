@@ -23,18 +23,21 @@
 ## 3. System Architecture & Modules
 
 ### `@opentalon/core` (Control Plane)
-- **`DualBrainRouter`**: Coordinates Fast Path (<1,500 token budget) and Slow Path (async event-driven evolution).
+- **`DualBrainRouter`**: Coordinates Fast Path (<1,500 token budget), Canonical KV-Cache Prefix Pinning, Dynamic System-2 Thinking Budget, Grounded Research Memory Persistence, and Slow Path (async event-driven evolution).
+- **`ThinkingBudgetCalculator`**: Deterministic `O(1)` task entropy evaluator mapping lexical complexity, code blocks, analytical/security keywords, tool count, multimodal attachments, and retry state to `0`–`65,536` `thinkingBudget`.
+- **`FinOpsBudgetTracker`**: Sovereign FinOps cost ledger tracking per-model USD cost, KV-cache USD savings, and enforcing daily token/cost envelopes with automatic frugal throttle (`<= 2,048` thinking cap at $\ge 80\%$ utilization).
+- **`ContextCacheManager`**: Auto-wired Gemini `cachedContent` and canonical prefix hit tracker with bounded LRU/FIFO eviction (`maxEntries: 200`).
 - **`CronScheduler` & `CronParser`**: Autonomous in-process heartbeat scheduler evaluating 5-part UNIX cron expressions and natural intervals (`@hourly`, `every 30m`), single-flight execution mutex, timeout guards, and dual routing (Fast Path prompt vs. Zero-Token direct skill).
-- **`TokenBudgeter`**: Context pruner maintaining strict per-turn token ceilings (~3.8 chars/token).
+- **`TokenBudgeter`**: Context pruner maintaining strict per-turn token ceilings (~3.8 chars/token) with canonical alphabetical sorting for tools and semantic facts.
 - **Hexagonal `LLMPort`**: Pluggable drivers including:
-  - `GeminiDriver` (native `thinkingConfig.thinkingBudget`, prompt caching, and automatic fallback)
+  - `GeminiDriver` (native `thinkingConfig.thinkingBudget`, multimodal `inlineData` attachments, prompt caching, Search Grounding, and automatic fallback)
   - `AnthropicDriver` (Claude 3.7 hybrid thinking tokens & tool calling)
   - `DeepSeekDriver` (ultra-frugal reasoning content extraction)
   - `OllamaDriver` (100% offline local inference & embeddings)
   - `OpenAIDriver` (standard chat completions & embeddings)
-  - `CascadingLLMDriver` (dynamic priority failover & circuit breakers)
+  - `CascadingLLMDriver` (dynamic priority failover, circuit breakers, and `findDriver` inspection)
   - `MockLLMDriver` (deterministic offline testing double)
-- **`EvolutionEngine` & `HeuristicsExtractor`**: Autonomous reflection on failed/missing-skill traces with dry-run sandbox verification.
+- **`EvolutionEngine` & `HeuristicsExtractor`**: Autonomous reflection on failed/missing-skill traces with dry-run sandbox verification and **Speculative Multi-Draft Synthesis** (`evolveOpportunitySpeculative`, benchmarking $N$ parallel candidates across varied temperatures).
 - **`McpServer` & `McpClientAdapter`**: Full MCP v1.x JSON-RPC 2.0 protocol implementation over Stdio.
 - **`SwarmDirector`**: 3 multi-agent topologies (Fan-Out/Fan-In, Pipeline Saga, Critic-Validator Loop).
 
@@ -63,14 +66,14 @@
 - **Embedded Web Dashboard (8 Tabs)**: Zero-dependency dark-mode Cockpit with Overview Telemetry, 3D Holographic Core, Traces Inspector, Skills Explorer with Sandbox Runner, Swarm Topologies, MCP Hub, Semantic Memory, Live Streaming Chat Playground, and Automations & Cron Manager.
 
 ### `talon` CLI
-- Binary commands: `init`, `run`, `chat`, `serve`, `dashboard`, `cron` (or `schedule`), `mcp`, `swarm`, `evolve`, `skills list`, `skills add`, `providers`, `memory`.
+- Binary commands: `init`, `run`, `chat`, `serve`, `dashboard`, `cron` (or `schedule`), `booster`, `finops`, `cache`, `analyze`, `mcp`, `swarm`, `evolve`, `skills list`, `skills add`, `providers`, `memory`.
 
 ---
 
 ## 4. Non-Functional Requirements (NFR)
 - **Zero-Latency In-Process**: Monorepo packages call each other in-process with 0ms network hop.
-- **Token Budget Ceiling**: Fast Path prompt payload $\le 1,500$ tokens per turn.
-- **Test Coverage**: 100% passing unit tests (69 tests across 11 test suites) in under 2 seconds.
+- **Token Budget Ceiling**: Fast Path prompt payload $\le 1,500$ tokens per turn with 100% byte-identical canonical prefix sorting.
+- **Test Coverage**: 100% passing unit tests (123 tests across 18 test suites) in ~2.5 seconds.
 - **Anti-Slop Compliance**: Zero placeholder implementations (`// TODO`), production-grade TypeScript strictness (`noUnusedLocals: true`, strict ESM).
 - **Type Safety**: Full TypeScript 5.8+ type definitions (`.d.ts`) emitted via `tsup`.
 

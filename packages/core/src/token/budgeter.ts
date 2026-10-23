@@ -1,4 +1,5 @@
-import { type ChatMessage, type ToolDefinition } from '../types.js';
+import crypto from 'node:crypto';
+import { type ChatMessage, type ToolDefinition, type SemanticFact } from '../types.js';
 
 export class TokenBudgeter {
   /**
@@ -29,6 +30,82 @@ export class TokenBudgeter {
   public static estimateToolsTokens(tools?: ToolDefinition[]): number {
     if (!tools || tools.length === 0) return 0;
     return this.estimateTokens(JSON.stringify(tools));
+  }
+
+  /**
+   * Deterministically sorts ToolDefinitions by name and recursively sorts parameter keys
+   * so that KV-Cache prefixes remain 100% byte-identical across turns.
+   */
+  public static canonicalizeTools(tools: ToolDefinition[]): ToolDefinition[] {
+    if (!tools || tools.length === 0) return [];
+    return [...tools]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        parameters: this.canonicalizeObject(tool.parameters) as Record<string, unknown>,
+      }));
+  }
+
+  /**
+   * Deterministically sorts SemanticFacts by category and key to preserve prefix stability.
+   */
+  public static canonicalizeFacts(facts: SemanticFact[]): SemanticFact[] {
+    if (!facts || facts.length === 0) return [];
+    return [...facts].sort((a, b) => {
+      const catCmp = a.category.localeCompare(b.category);
+      if (catCmp !== 0) return catCmp;
+      return a.key.localeCompare(b.key);
+    });
+  }
+
+  /**
+   * Builds a canonically ordered system prompt prefix and returns its deterministic SHA-256 fingerprint.
+   */
+  public static buildCanonicalSystemPrompt(
+    baseInstruction: string,
+    facts: SemanticFact[],
+    tools?: ToolDefinition[]
+  ): { systemPrompt: string; canonicalTools: ToolDefinition[]; prefixHash: string } {
+    const sortedFacts = this.canonicalizeFacts(facts);
+    const canonicalTools = tools ? this.canonicalizeTools(tools) : [];
+
+    let systemPrompt = baseInstruction.trim();
+
+    if (sortedFacts.length > 0) {
+      const factSnippets = sortedFacts
+        .map((f) => `• [${f.category}] ${f.key}: ${f.value}`)
+        .join('\n');
+      systemPrompt += `\n\nVerified Knowledge Context:\n${factSnippets}`;
+    }
+
+    const prefixPayload = JSON.stringify({
+      systemPrompt,
+      tools: canonicalTools,
+    });
+
+    const prefixHash = crypto.createHash('sha256').update(prefixPayload).digest('hex');
+
+    return {
+      systemPrompt,
+      canonicalTools,
+      prefixHash,
+    };
+  }
+
+  private static canonicalizeObject(val: unknown): unknown {
+    if (Array.isArray(val)) {
+      return val.map((item) => this.canonicalizeObject(item));
+    }
+    if (val !== null && typeof val === 'object') {
+      const sortedKeys = Object.keys(val as Record<string, unknown>).sort();
+      const result: Record<string, unknown> = {};
+      for (const k of sortedKeys) {
+        result[k] = this.canonicalizeObject((val as Record<string, unknown>)[k]);
+      }
+      return result;
+    }
+    return val;
   }
 
   /**

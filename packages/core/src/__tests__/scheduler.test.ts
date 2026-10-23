@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { LibSqlMemoryAdapter } from '@opentalon/memory';
 import { SandboxedVmRunner } from '@opentalon/skill-engine';
 import { CronParser } from '../scheduler/cron-parser.js';

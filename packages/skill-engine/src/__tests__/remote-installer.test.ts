@@ -36,7 +36,7 @@ describe('RemoteSkillInstaller', () => {
   describe('auditCapabilities', () => {
     it('approves safe capabilities without warnings', () => {
       const audit = RemoteSkillInstaller.auditCapabilities({
-        net: { allowedHosts: ['api.exchangerate.host'] },
+        net: { allowedHosts: ['api.exchangerate.host'], allowHttp: false },
       });
       expect(audit.isSafe).toBe(true);
       expect(audit.warnings).toHaveLength(0);
@@ -44,7 +44,7 @@ describe('RemoteSkillInstaller', () => {
 
     it('flags wildcard network permissions', () => {
       const audit = RemoteSkillInstaller.auditCapabilities({
-        net: { allowedHosts: ['*'] },
+        net: { allowedHosts: ['*'], allowHttp: false },
       });
       expect(audit.isSafe).toBe(false);
       expect(audit.warnings[0]).toContain('Unrestricted wildcard network access');
@@ -52,7 +52,7 @@ describe('RemoteSkillInstaller', () => {
 
     it('allows wildcard network permissions if force is true', () => {
       const audit = RemoteSkillInstaller.auditCapabilities(
-        { net: { allowedHosts: ['*'] } },
+        { net: { allowedHosts: ['*'], allowHttp: false } },
         true
       );
       expect(audit.isSafe).toBe(true);

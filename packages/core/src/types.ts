@@ -1,10 +1,19 @@
 import { type ProceduralSkill, type SemanticFact, type IMemoryPort } from '@opentalon/memory';
 export type { EpisodicTrace, ProceduralSkill, SemanticFact } from '@opentalon/memory';
 import { type ISkillSandbox, type SkillSynthesizer } from '@opentalon/skill-engine';
+import { type ContextCacheManager } from './drivers/context-cache-manager.js';
+import { type FinOpsBudgetTracker } from './token/finops-tracker.js';
+
+export interface MultimodalAttachment {
+  mimeType: string; // e.g. 'image/png', 'image/jpeg', 'application/pdf', 'audio/mp3'
+  data: string;     // Base64-encoded payload (without data:...;base64, prefix)
+  name?: string;
+}
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
+  attachments?: MultimodalAttachment[];
   toolCalls?: Array<{
     id: string;
     name: string;
@@ -27,6 +36,21 @@ export interface ThinkingConfig {
   mode?: 'fast' | 'balanced' | 'deep';
 }
 
+export interface GroundingSource {
+  title: string;
+  url: string;
+  snippet?: string;
+}
+
+export interface GroundingMetadata {
+  webSearchQueries?: string[];
+  sources?: GroundingSource[];
+  groundingSupports?: Array<{
+    segment: string;
+    sourceIndices: number[];
+  }>;
+}
+
 export interface LLMRequest {
   messages: ChatMessage[];
   systemInstruction?: string;
@@ -35,6 +59,7 @@ export interface LLMRequest {
   maxTokens?: number;
   thinkingConfig?: ThinkingConfig;
   cachedContentId?: string;
+  enableSearchGrounding?: boolean;
 }
 
 export interface LLMResponse {
@@ -51,6 +76,8 @@ export interface LLMResponse {
   };
   model: string;
   thinkingContent?: string;
+  groundingMetadata?: GroundingMetadata;
+  cachedContentUsed?: string;
 }
 
 export interface StreamChunk {
@@ -69,6 +96,8 @@ export interface StreamChunk {
   };
   model?: string;
   error?: string;
+  groundingMetadata?: GroundingMetadata;
+  cachedContentUsed?: string;
 }
 
 export interface ILLMPort {
@@ -81,10 +110,14 @@ export interface ILLMPort {
 export interface FastPathOptions {
   sessionId: string;
   input: string;
+  attachments?: MultimodalAttachment[];
   history?: ChatMessage[];
   topKSkills?: number;
   topKFacts?: number;
   maxTokensBudget?: number;
+  enableSearchGrounding?: boolean;
+  autoSaveGroundedFacts?: boolean; // Default true when enableSearchGrounding is active
+  thinkingConfig?: ThinkingConfig;
 }
 
 export interface FastPathResult {
@@ -103,6 +136,16 @@ export interface FastPathResult {
     totalTokens: number;
   };
   latencyMs: number;
+  groundingMetadata?: GroundingMetadata;
+  groundedFactsSaved?: number;
+  cachedContentUsed?: string;
+  thinkingBudgetUsed?: number;
+  thinkingTier?: 'fast' | 'balanced' | 'deep' | 'extreme';
+  prefixHash?: string;
+  prefixHit?: boolean;
+  tokensSaved?: number;
+  estimatedCostUsd?: number;
+  estimatedSavingsUsd?: number;
 }
 
 export interface RouterConfig {
@@ -110,6 +153,8 @@ export interface RouterConfig {
   sandbox: ISkillSandbox;
   llm: ILLMPort;
   synthesizer?: SkillSynthesizer;
+  cacheManager?: ContextCacheManager;
+  finopsTracker?: FinOpsBudgetTracker;
   maxFastPathTokens?: number; // Default 1500
   enableAsyncEvolution?: boolean; // Default true
   evolutionDebounceMs?: number; // In-memory debounce buffer window (Default 5000ms)

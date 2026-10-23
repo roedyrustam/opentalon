@@ -43,7 +43,38 @@ export class SseStreamAdapter {
           const result = await this.router.executeFastPath({
             sessionId,
             input: payload.input,
+            attachments: payload.attachments,
             history: payload.history,
+            enableSearchGrounding: payload.enableSearchGrounding,
+            autoSaveGroundedFacts: payload.autoSaveGroundedFacts,
+            thinkingConfig: payload.thinkingConfig,
+          });
+
+          // Stream Grounding Citations if present
+          if (result.groundingMetadata) {
+            sendEvent('grounding', {
+              ...result.groundingMetadata,
+              groundedFactsSaved: result.groundedFactsSaved ?? 0,
+            });
+          }
+
+          // Stream Cache Hit or Canonical Prefix Hit event if present
+          if (result.cachedContentUsed || result.prefixHit) {
+            sendEvent('cache_hit', {
+              cacheId: result.cachedContentUsed || `prefix_${(result.prefixHash || '').slice(0, 10)}`,
+              explicitCache: Boolean(result.cachedContentUsed),
+              prefixHit: Boolean(result.prefixHit),
+              tokensSaved: result.tokensSaved ?? 0,
+            });
+          }
+
+          // Stream Booster Thinking Telemetry
+          sendEvent('booster', {
+            thinkingBudgetUsed: result.thinkingBudgetUsed ?? 0,
+            thinkingTier: result.thinkingTier ?? 'fast',
+            prefixHash: result.prefixHash,
+            prefixHit: Boolean(result.prefixHit),
+            tokensSaved: result.tokensSaved ?? 0,
           });
 
           // Stream retrieved skills
@@ -68,6 +99,9 @@ export class SseStreamAdapter {
           sendEvent('stats', {
             latencyMs: result.latencyMs,
             tokensUsed: result.tokensUsed,
+            thinkingBudgetUsed: result.thinkingBudgetUsed ?? 0,
+            thinkingTier: result.thinkingTier ?? 'fast',
+            tokensSaved: result.tokensSaved ?? 0,
           });
 
           sendEvent('done', { ok: true });

@@ -1,50 +1,23 @@
-# Session Checkpoint: OpenTalon Platform Evolution
+# Session Checkpoint: OpenTalon Platform Evolution (v0.5.0 — Complete Gemini Agent Booster & FinOps Suite)
 
-- **Status**: Live Gemini API Active (`gemini-3.5-flash-lite` + `gemini-embedding-001`), Daemon Running (http://127.0.0.1:3100), 100% Tests Passing (107/107)
+- **Status**: Live Gemini API Ready (`gemini-3.5-flash-lite` + `gemini-embedding-001`), 123/123 Tests Passing across 18 Test Suites, 0 TypeScript Errors
 - **Active Workspace**: `c:\talon`
-- **Milestones Completed**:
-  1. **Autonomous Proactive Background Daemon & Heartbeat Scheduler (`@opentalon/core`)**:
-     - Built-in `CronScheduler` ticking every 1,000ms with single-flight mutex protection (no overlapping runs).
-     - Lightweight `CronParser` supporting standard 5-part UNIX cron (`*/15 * * * *`), shorthand aliases (`@hourly`, `@daily`, `@weekly`, `@monthly`, `@yearly`), and natural intervals (`every 30s`, `every 15m`, `every 2h`).
-     - Dual Execution Routing:
-       - *Prompt Action*: Executes through `DualBrainRouter` with strict token budget enforcement ($<1,500$ tokens).
-       - *Direct Skill Action*: Executes directly in the Zero-Trust Sandbox (`SandboxedVmRunner`) consuming **0 tokens** (100% local VM compute).
-     - Anti-Thundering Herd & Catch-Up Coalescing: Collapses missed schedules after system sleep into a single run to prevent CPU/token storms.
-     - Circuit breaker auto-pause after `maxRetries` (default 3) consecutive failures.
-  2. **Inbound Webhook Ingress Gateway (`@opentalon/gateway`)**:
-     - Dedicated ingress endpoint `POST /api/webhooks/:name` to wake the agent from external systems (GitHub, Stripe, uptime monitors).
-     - Optional HMAC SHA-256 signature verification (`X-Talon-Signature` matching `TALON_WEBHOOK_SECRET`).
-     - Maps webhook payloads to registered jobs, direct skills, or Fast Path synthesis prompts.
-  3. **Visual Cockpit Dashboard Tab 8: Automations & Cron Manager**:
-     - Live proactive alert banner streaming real-time notifications via SSE (`/api/events`).
-     - Zero-config instant automation presets ("Hourly Health Check", "Daily System Digest", "30s Rapid Watcher").
-     - Full CRUD management: New Automation drawer/modal, status toggle (Active/Paused), manual on-demand trigger, and inline deletion.
-     - Execution History & Audit Logs drawer tracking duration, tokens used, statuses, and outputs.
-  4. **CLI Command Suite `talon cron` (alias `talon schedule`)**:
-     - `talon cron list`: Tabular overview of all registered automations, schedules, and next run times.
-     - `talon cron add`: Registers automations with `--name`, `--cron`, `--prompt` or `--skill`, and `--args` (with resilient PowerShell unquoted JSON parsing).
-     - `talon cron trigger <idOrName>`: Manual on-demand execution.
-     - `talon cron pause <idOrName>` & `talon cron resume <idOrName>`: Pause and resume without deleting.
-     - `talon cron remove <idOrName>`: Permanent deletion.
-     - `talon cron logs [idOrName]`: Full audit logs with duration, tokens, and outputs.
-  5. **Live Local Gateway Daemon**: Running continuously on `http://127.0.0.1:3100` (`talon serve`), providing:
-     - `/health`: Healthcheck status.
-     - `/dashboard`: Unified reactive 8-tab Web Cockpit with 3D Holographic Core.
-     - `/showcase` & `/3d`: Standalone 60FPS 3D Holographic Core & dynamic visual identity.
-     - `/v1/chat` & `/v1/stream`: Fast Path frugal execution (<1,500 tokens) with multi-turn history & SSE streaming.
-     - `/api/stats`, `/api/skills`, `/api/traces`, `/api/facts`, `/api/cron/*`, `/api/webhooks/*`: CRUD & telemetry endpoints.
-     - `/api/memory/export` & `/api/memory/import`: Portable snapshot migration.
-     - `/api/evolution/run` & `/api/evolution/status`: Hermes Slow Path cognitive evolution triggers & telemetry.
-     - `/api/events`: Live Server-Sent Events (SSE) router bus.
-     - `/api/mcp/*`: Full Model Context Protocol server & JSON-RPC tools.
-     - `/api/swarm/execute`: Swarm 2026 Topologies orchestrator.
-  6. **Memory Snapshot Export & Import**:
-     - Complete serialization and portable backup of procedural skills, semantic facts, scheduled jobs, and episodic traces.
-  7. **Multi-Model Provider Cascading & Local SLM Integration**:
-     - `CascadingLLMDriver` implementing `ILLMPort` with priority-tiered failover (Gemini -> Claude -> DeepSeek -> OpenAI -> Ollama -> Mock).
-  8. **Skill Chaining & Procedural Mesh**:
-     - Sandboxed skills invoke other procedural skills via `callSkill(name, args)` with anti-recursion depth limits.
-  9. **Test Hygiene**: 107/107 tests passing across all 16 test suites with 0 regressions. Full monorepo build passing. Local daemon active on `http://127.0.0.1:3100`.
-
-
-
+- **Complete 5-Pillar Gemini Agent Booster Milestones**:
+  1. **Pillar 1: Dynamic System-2 Thinking Budget & Canonical KV-Cache Engine (`v0.3.0`)**:
+     - `ThinkingBudgetCalculator`: Deterministic `O(1)` task entropy scoring (`0..100`) mapping to `fast` (`0`–`2048`), `balanced` (`4096`–`8192`), `deep` (`16384`–`32768`), and `extreme` (`65536`) `thinkingBudget`.
+     - `TokenBudgeter.buildCanonicalSystemPrompt()`: Alphabetical sorting of `ToolDefinition[]`, nested JSON Schema keys, and `SemanticFact[]` (`category:key`) + SHA-256 `prefixHash`.
+     - `ContextCacheManager`: Auto-wired into `DualBrainRouter` & `CascadingLLMDriver` with bounded LRU/FIFO eviction (`maxEntries: 200`), prefix hit tracking, and fallback (`gemini-4-pro` / `gemini-4-argon` $\rightarrow$ `gemini-3.8-flash`).
+  2. **Pillar 2: Native Multimodal Vision, PDF & Audio Ingestion (`v0.4.0`)**:
+     - `MultimodalAttachment` support in `ChatMessage`, `FastPathOptions`, `GeminiDriver` (`inlineData` parts in `generateContent` and `streamContent`), and `GatewayRequestPayload`.
+     - Automatic `+20` entropy boost in `ThinkingBudgetCalculator` when multimodal attachments are present.
+     - Web Cockpit `📎 Attach` button with `FileReader` Base64 encoding and live attachment pill bar.
+  3. **Pillar 3: Autonomous Grounded Research Memory Persistence (`v0.4.0`)**:
+     - `DualBrainRouter.executeFastPath()` automatically persists verified Google Search Grounding sources (`GroundingMetadata.sources`) into `semantic_facts` (`category: 'grounded_research'`, `confidence: 0.95`).
+     - Web Cockpit `+N Auto-Saved to Memory` badge and `Grounded Web Research` category filter.
+  4. **Pillar 4: Speculative Multi-Draft Skill Evolution (`v0.4.0`)**:
+     - `EvolutionEngine.evolveOpportunitySpeculative()`: Parallel candidate generation across varied temperatures (`0.1`, `0.35`, `0.6`, `0.8`, `0.9`), sandbox benchmark verification, and selection of the fastest passing winner.
+     - Exposed via CLI (`talon evolve --speculative 3`), REST (`POST /api/evolution/run`), and Web Cockpit Overview selector.
+  5. **Pillar 5: Sovereign FinOps Cost Envelope & Frugal Throttle Guard (`v0.5.0`)**:
+     - `FinOpsBudgetTracker`: Per-model ledger tracking prompt/completion/thinking tokens, KV-cache saved tokens, estimated USD spend (`estimatedCostUsd`), and USD savings (`estimatedSavingsUsd`).
+     - Automatic **Frugal Throttle Guard**: When daily token or USD utilization reaches $\ge 80\%$, `DualBrainRouter` automatically caps `thinkingBudget` at $\le 2,048$ tokens (`finops_frugal_throttle_cap`).
+     - Exposed via REST (`GET /api/finops/report`, `GET /api/booster/stats`, `GET /api/stats`) and CLI (`talon finops`, `talon booster`).

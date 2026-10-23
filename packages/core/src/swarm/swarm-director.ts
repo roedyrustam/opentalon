@@ -1,4 +1,5 @@
 import { type ILLMPort, type LLMRequest } from '../types.js';
+import { ThinkingBudgetCalculator } from '../token/thinking-budget-calculator.js';
 import {
   type SwarmTaskRequest,
   type SwarmTaskResult,
@@ -8,9 +9,11 @@ import {
 
 export class SwarmDirector {
   private llm: ILLMPort;
+  private defaultWorkerLLM?: ILLMPort;
 
-  constructor(llm: ILLMPort) {
+  constructor(llm: ILLMPort, defaultWorkerLLM?: ILLMPort) {
     this.llm = llm;
+    this.defaultWorkerLLM = defaultWorkerLLM;
   }
 
   /**
@@ -71,10 +74,15 @@ ${subagentResults.map((r) => `=== [${r.role}] ===\n${r.output}\n`).join('\n')}
 Synthesize the above specialized perspectives into a cohesive, production-grade final response.
 `;
 
+    const synthEval = ThinkingBudgetCalculator.evaluate({
+      input: synthesisPrompt,
+      isArchitectureOrEvolution: true,
+    });
+
     const synthRes = await this.llm.generateContent({
       systemInstruction: 'You are a master technical synthesizer. Assemble cohesive multi-agent results.',
       messages: [{ role: 'user', content: synthesisPrompt }],
-      thinkingConfig: { thinkingBudget: 8192 },
+      thinkingConfig: { thinkingBudget: Math.max(8192, synthEval.thinkingBudget), mode: synthEval.mode },
     });
 
     const totalTokens = this.accumulateTokens([
@@ -168,7 +176,12 @@ Please perform your specialized stage execution on the input.
         ? request.task
         : `Previous Draft:\n${currentDraft}\n\nCritic Feedback to Resolve:\n${criticFeedback}\n\nPlease revise the solution completely.`;
 
-      const draftResult = await this.runSubagent(implementer, draftPrompt, request.contextSlice);
+      const draftResult = await this.runSubagent(
+        implementer,
+        draftPrompt,
+        request.contextSlice,
+        iterations > 1
+      );
       subagentResults.push(draftResult);
       currentDraft = draftResult.output;
 
@@ -209,13 +222,20 @@ Otherwise, provide specific, actionable critique for what needs to be fixed.
   private async runSubagent(
     agent: SubagentDefinition,
     prompt: string,
-    contextSlice?: Record<string, unknown>
+    contextSlice?: Record<string, unknown>,
+    isRetry = false
   ): Promise<SubagentExecutionResult> {
     const start = Date.now();
     try {
       let finalPrompt = prompt;
       if (contextSlice && Object.keys(contextSlice).length > 0) {
-        finalPrompt = `Context Slice:\n${JSON.stringify(contextSlice, null, 2)}\n\nUser Task:\n${prompt}`;
+        // Canonicalize contextSlice keys for KV-Cache prefix determinism across subagents
+        const sortedKeys = Object.keys(contextSlice).sort();
+        const canonicalSlice: Record<string, unknown> = {};
+        for (const k of sortedKeys) {
+          canonicalSlice[k] = contextSlice[k];
+        }
+        finalPrompt = `Context Slice:\n${JSON.stringify(canonicalSlice, null, 2)}\n\nUser Task:\n${prompt}`;
       }
 
       const req: LLMRequest = {
@@ -223,11 +243,23 @@ Otherwise, provide specific, actionable critique for what needs to be fixed.
         messages: [{ role: 'user', content: finalPrompt }],
       };
 
-      if (agent.thinkingBudget) {
+      if (agent.thinkingBudget !== undefined) {
         req.thinkingConfig = { thinkingBudget: agent.thinkingBudget };
+      } else {
+        const dynamicEval = ThinkingBudgetCalculator.evaluate({
+          input: finalPrompt,
+          isRetry,
+        });
+        if (dynamicEval.thinkingBudget > 0) {
+          req.thinkingConfig = {
+            thinkingBudget: dynamicEval.thinkingBudget,
+            mode: dynamicEval.mode,
+          };
+        }
       }
 
-      const res = await this.llm.generateContent(req);
+      const driver = agent.workerLLM ?? this.defaultWorkerLLM ?? this.llm;
+      const res = await driver.generateContent(req);
 
       return {
         agentId: agent.id,

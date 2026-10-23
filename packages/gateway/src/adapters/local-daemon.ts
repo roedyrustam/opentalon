@@ -115,6 +115,7 @@ export class LocalDaemonAdapter {
               traces.length > 0
                 ? traces.reduce((acc, t) => acc + t.latencyMs, 0) / traces.length
                 : 0;
+            const booster = this.router.getBoosterStats();
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(
@@ -123,8 +124,35 @@ export class LocalDaemonAdapter {
                 tracesCount: traces.length,
                 factsCount: facts.length,
                 avgLatencyMs: Math.round(avgLatency),
+                booster,
               })
             );
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+          return;
+        }
+
+        // 3b. Gemini Agent Booster & KV-Cache Stats Endpoint
+        if (req.method === 'GET' && url.pathname === '/api/booster/stats') {
+          try {
+            const booster = this.router.getBoosterStats();
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(booster));
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+          return;
+        }
+
+        // 3c. Sovereign FinOps Cost Envelope & Token Ledger Endpoint
+        if (req.method === 'GET' && url.pathname === '/api/finops/report') {
+          try {
+            const report = this.router.getFinOpsTracker().getReport();
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(report));
           } catch (err: unknown) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: String(err) }));
@@ -501,7 +529,11 @@ export class LocalDaemonAdapter {
               const result = await this.router.executeFastPath({
                 sessionId,
                 input: payload.input,
+                attachments: payload.attachments,
                 history: payload.history,
+                enableSearchGrounding: payload.enableSearchGrounding,
+                autoSaveGroundedFacts: payload.autoSaveGroundedFacts,
+                thinkingConfig: payload.thinkingConfig,
               });
 
               const responsePayload: GatewayResponsePayload = {
@@ -510,6 +542,14 @@ export class LocalDaemonAdapter {
                 latencyMs: result.latencyMs,
                 tokensUsed: result.tokensUsed,
                 retrievedSkills: result.retrievedSkills.map((s) => ({ id: s.id, name: s.name })),
+                groundingMetadata: result.groundingMetadata,
+                groundedFactsSaved: result.groundedFactsSaved,
+                cachedContentUsed: result.cachedContentUsed,
+                thinkingBudgetUsed: result.thinkingBudgetUsed,
+                thinkingTier: result.thinkingTier,
+                prefixHash: result.prefixHash,
+                prefixHit: result.prefixHit,
+                tokensSaved: result.tokensSaved,
               };
 
               res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -653,9 +693,14 @@ export class LocalDaemonAdapter {
               const payload = body ? JSON.parse(body) : {};
               const limit = typeof payload.limit === 'number' ? payload.limit : 50;
               const dryRun = Boolean(payload.dryRun);
+              const speculativeDraftCount =
+                typeof payload.speculativeDraftCount === 'number'
+                  ? payload.speculativeDraftCount
+                  : undefined;
               const report = await this.router.getEvolutionEngine().runEvolutionCycle({
                 traceLimit: limit,
                 dryRun,
+                speculativeDraftCount,
               });
               res.writeHead(200, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify(report));
