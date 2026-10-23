@@ -58,6 +58,10 @@ describe('Gateway - Embedded Web Dashboard & Cockpit APIs', () => {
     expect(html).toContain('cron-alert-banner');
     expect(html).toContain('swarm-top-fanout');
     expect(html).toContain('mcp-tools-list');
+    expect(html).toContain('A2A Mesh');
+    expect(html).toContain('a2a-peers-table-body');
+    expect(html).toContain('a2a-logs-table-body');
+    expect(html).toContain('a2a-node-urn');
   });
 
   it('returns statistics via GET /api/stats', async () => {

@@ -68,6 +68,10 @@ Most AI agent frameworks burn **10,000–40,000 tokens per turn**, execute arbit
    - Tracks real-time USD cost and KV-cache USD savings per model (`FinOpsBudgetTracker`). Automatically activates a **Frugal Throttle Guard** at $\ge 80\%$ daily budget utilization, capping `thinkingBudget` at $\le 2,048$ tokens to prevent runaway API bills.
 6. **⏰ Proactive Heartbeat Scheduler & HMAC Webhook Ingress**
    - Built-in `CronScheduler` supporting UNIX cron (`*/15 * * * *`), aliases (`@hourly`, `@daily`), and natural intervals (`every 30s`, `every 15m`) with **0-Token Direct Skill Execution** and `POST /api/webhooks/:name` HMAC SHA-256 verification.
+7. **🤝 A2A Protocol & Multi-Daemon P2P Mesh Federation (v0.6.0)**
+   - Decentralized Peer-to-Peer mesh federation powered by auto-generated **Ed25519 asymmetric keypairs** stored in SQLite (`agent_identity`).
+   - Discovers nodes via standard **`/.well-known/agent.json` Agent Cards**.
+   - Zero-token capability negotiation (`POST /api/a2a/negotiate`) and signed task delegation (`POST /api/a2a/dispatch`) with replay attack shields (`nonce` deduplication cache + $\pm60$s skew check) and circular delegation loop prevention (`delegationDepth <= 3`).
 
 ---
 
@@ -118,11 +122,11 @@ pnpm install
 # Build all 5 monorepo packages
 pnpm build
 
-# Run the 123 unit & integration tests (completes in ~2.5s)
+# Run the 139 unit & integration tests across 21 test files (completes in ~2.5s)
 pnpm test
 ```
 
-### 3. Initialize & Launch the 8-Tab Web Cockpit
+### 3. Initialize & Launch the 9-Tab Web Cockpit
 ```bash
 # Initialize local SQLite database & seed 6 production skills
 pnpm talon init
@@ -130,13 +134,13 @@ pnpm talon init
 # Configure your LLM provider key (supports Gemini, Claude, DeepSeek, OpenAI, or 100% offline Ollama)
 cp .env.example .env
 
-# Start the Local Daemon + 8-Tab Web Cockpit on http://127.0.0.1:3100
+# Start the Local Daemon + 9-Tab Web Cockpit on http://127.0.0.1:3100
 pnpm talon serve --port 3100
 ```
 
 ---
 
-## 🖥️ Web Cockpit Dashboard (8 Built-In Tabs)
+## 🖥️ Web Cockpit Dashboard (9 Built-In Tabs)
 
 Open `http://127.0.0.1:3100/dashboard` in your browser to access the zero-dependency dark-mode Cockpit:
 1. **Overview & 3D Holographic Core**: Live 60FPS interactive 3D core, KV-Cache savings counter, System-2 thinking telemetry, and 1-click Speculative Evolution trigger.
@@ -147,6 +151,7 @@ Open `http://127.0.0.1:3100/dashboard` in your browser to access the zero-depend
 6. **Semantic Memory**: Search FTS5 declarative facts, user preferences, and auto-saved **Grounded Web Research** citations.
 7. **Live Playground**: Real-time SSE token streaming with **Google Search Grounding**, **Thinking Budget Selector**, and **📎 Multimodal Attachment (Image/PDF/Audio)** upload.
 8. **Automations & Cron Manager**: One-click automation presets, custom cron/interval jobs, manual triggers, and live audit logs.
+9. **A2A Mesh Federation**: Inspect local Ed25519 node identity & Agent Card (`/.well-known/agent.json`), manage federated peer registry, auto-discover remote nodes, and monitor cryptographic audit logs.
 
 ---
 
@@ -159,28 +164,35 @@ pnpm talon run "Convert 250 USD to IDR and calculate 11% VAT"
 # 2. Interactive Dual-Brain REPL Chat
 pnpm talon chat
 
-# 3. Gemini Agent Booster — Evaluate Task Entropy & Thinking Budget
+# 3. Agent-to-Agent (A2A) Protocol & P2P Mesh Federation (v0.6.0)
+pnpm talon a2a identity                                     # View node URN, Ed25519 public key, and active skills
+pnpm talon a2a peers                                        # List all registered federated peers
+pnpm talon a2a register http://192.168.1.50:3100            # Auto-discover remote peer via Agent Card
+pnpm talon a2a ping peer-remote-node-1                      # Test round-trip latency to a peer node
+pnpm talon a2a dispatch peer-remote-node-1 "Extract tables" # Signed remote subagent dispatch
+
+# 4. Gemini Agent Booster — Evaluate Task Entropy & Thinking Budget
 pnpm talon booster evaluate "Refactor distributed concurrency lock and verify invariants" --tools 3
 pnpm talon booster status
 
-# 4. Sovereign FinOps — Inspect Token Ledger, USD Savings & Frugal Throttle
+# 5. Sovereign FinOps — Inspect Token Ledger, USD Savings & Frugal Throttle
 pnpm talon finops
 
-# 5. Autonomous Slow-Path Evolution (with 3x Speculative Multi-Draft Benchmarking)
+# 6. Autonomous Slow-Path Evolution (with 3x Speculative Multi-Draft Benchmarking)
 pnpm talon evolve --speculative 3
 
-# 6. Autonomous Cron & Heartbeat Scheduler
+# 7. Autonomous Cron & Heartbeat Scheduler
 pnpm talon cron list
 pnpm talon cron add --name "api-watch" --cron "every 15m" --skill http_json_fetcher --args '{"url":"https://api.github.com"}'
 pnpm talon cron trigger api-watch
 pnpm talon cron logs
 
-# 7. Multi-Agent Swarm Orchestration
+# 8. Multi-Agent Swarm Orchestration
 pnpm talon swarm fanout "Design a zero-downtime PostgreSQL migration strategy"
 pnpm talon swarm saga "Extract requirements -> Design OpenAPI schema -> Generate TypeScript client"
 pnpm talon swarm critic "Write a constant-time HMAC signature verifier"
 
-# 8. Whole-Repo Monolithic Context Caching (2M+ Token Gemini 4 Pro / 3.8 Flash)
+# 9. Whole-Repo Monolithic Context Caching (2M+ Token Gemini 4 Pro / 3.8 Flash)
 pnpm talon analyze .
 ```
 

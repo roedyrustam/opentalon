@@ -15,7 +15,8 @@ OpenTalon is a high-performance, open-source AI Agent framework engineered with 
 8. [LLM Driver Providers](#llm-driver-providers)
 9. [Ingress Gateway Adapters](#ingress-gateway-adapters)
 10. [Authoring Procedural Skills (`SKILL.md`)](#authoring-procedural-skills-skillmd)
-11. [Verification & Testing](#verification--testing)
+11. [Agent-to-Agent (A2A) Protocol & P2P Mesh Federation](#a2a-protocol--p2p-mesh-federation)
+12. [Verification & Testing](#verification--testing)
 
 ---
 
@@ -695,16 +696,99 @@ OpenTalon natively implements both sides of the Model Context Protocol:
 
 ---
 
+## Agent-to-Agent (A2A) Protocol & P2P Mesh Federation
+
+Starting in **v0.6.0**, OpenTalon includes a decentralized, serverless-friendly **Agent-to-Agent (A2A) Peer-to-Peer Mesh Federation** protocol. Multiple OpenTalon daemons running across different physical machines, edge containers, or developer laptops can securely discover capabilities, negotiate task execution, and dispatch subagent workflows with zero centralization.
+
+### 1. Asymmetric Ed25519 Cryptographic Identity
+Every node generates a persistent RFC 8032 Ed25519 asymmetric keypair on its first boot and saves it in the local SQLite `agent_identity` table:
+- **`urn`**: Globally unique Uniform Resource Name formatted as `urn:talon:agent:<uuid4>`.
+- **`publicKey`**: Standard PEM and DER single-line Base64 format for HTTP headers.
+- **`privateKey`**: Secure PKCS#8 PEM stored exclusively on the host device.
+
+### 2. Standard Agent Card (`/.well-known/agent.json`)
+Conforming to modern multi-agent discovery patterns, every daemon automatically exposes its Agent Card:
+```json
+{
+  "urn": "urn:talon:agent:3463fe8f-618c-49cd-a9b3-20f20fc43490",
+  "name": "OpenTalon Node",
+  "version": "0.6.0",
+  "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAODUzKu25KxIvx/2Lfh7SkmCJRQmIQ8XElpV+O/icPYo=\n-----END PUBLIC KEY-----\n",
+  "endpoints": {
+    "base": "http://127.0.0.1:3100",
+    "agentCard": "http://127.0.0.1:3100/.well-known/agent.json",
+    "negotiate": "http://127.0.0.1:3100/api/a2a/negotiate",
+    "dispatch": "http://127.0.0.1:3100/api/a2a/dispatch"
+  },
+  "skills": [...],
+  "activeModel": "CascadingLLMDriver",
+  "status": "online",
+  "uptimeSeconds": 3600
+}
+```
+
+### 3. Cryptographic Signed Handshake & Replay Shield
+All inter-daemon requests require five tamper-evident HTTP headers signed via `AgentIdentityManager`:
+```http
+X-Talon-Agent-Id: urn:talon:agent:caller-uuid
+X-Talon-Public-Key: MCowBQYDK2VwAyEAODUzKu25KxIvx/2Lfh7SkmCJRQmIQ8XElpV+O/icPYo=
+X-Talon-Signature: <base64-encoded-signature>
+X-Talon-Timestamp: 1792779708000
+X-Talon-Nonce: <random-uuid4>
+```
+- **Payload Canonicalization**: Canonical recursive key-sorted JSON serialization (`canonicalJsonStringify`).
+- **Clock Skew Tolerance**: Strictly rejects messages with timestamps deviating by more than $\pm60$ seconds.
+- **Replay Protection**: High-speed in-memory LRU Nonce deduplication cache rejects duplicated nonces.
+
+### 4. Zero-Token Capability Negotiation (`POST /api/a2a/negotiate`)
+Before burning LLM tokens or transferring sensitive execution contexts, the caller initiates a 0-token negotiation handshake:
+```json
+{
+  "callerUrn": "urn:talon:agent:node-a",
+  "taskDescription": "Extract financial tables and convert currency",
+  "requiredCapabilities": ["convert_currency"],
+  "maxTokensBudget": 1500
+}
+```
+The receiver matches capabilities against its registered `SKILL.md` library and immediately returns `canExecute: true | false`, estimated latency, and token cost without invoking any frontier LLM.
+
+### 5. Remote Subagent Dispatch & Deadlock Prevention (`POST /api/a2a/dispatch`)
+When a node delegates a subagent task via `SwarmDirector` with `targetPeerUrl`:
+- The request passes `delegationDepth: number`.
+- Every hop increments `delegationDepth`. If `delegationDepth > 3`, the receiving node rejects the request with HTTP 400 to prevent infinite ping-pong loops or circular deadlock between peer daemons.
+- The task runs in the remote node's capability-gated sandbox with the specified `skillsFilter`.
+- Full cryptographic audit trails are persisted in SQLite `a2a_audit_logs`.
+
+### 6. CLI Command Reference
+```bash
+# Display local node identity, URN, and active capability manifest
+pnpm talon a2a identity
+
+# List all federated peers in the local SQLite mesh registry
+pnpm talon a2a peers
+
+# Register and auto-discover a remote peer via its Agent Card
+pnpm talon a2a register http://192.168.1.50:3100
+
+# Ping a peer to measure round-trip latency and verify online status
+pnpm talon a2a ping peer-test-1
+
+# Securely dispatch a remote task with cryptographic signature
+pnpm talon a2a dispatch peer-test-1 "Parse invoices and compute aggregates"
+```
+
+---
+
 ## Verification & Testing
 
-OpenTalon includes a comprehensive test suite across all monorepo modules using **Vitest**:
+OpenTalon maintains 100% test passing across all workspace packages using **Vitest**:
 
 ```bash
 pnpm test
 ```
 
-### Test Coverage Highlights (69 Tests Across 11 Suites)
-- **`@opentalon/memory`**: Verified FTS5 full-text indexing, vector cosine distance, RRF score ordering, and trace persistence (`memory.test.ts` - 7 tests).
-- **`@opentalon/core`**: Verified Fast Path token budget truncation (<1,500 tokens), hybrid retrieval, LLM tool-calling loops, mock driver fallback, Hermes Evolution reflection, MCP JSON-RPC 2.0 protocols, and Swarm multi-agent orchestration (Fan-Out/Fan-In, Pipeline Saga, Critic-Validator Loop) (`core.test.ts`, `evolution.test.ts`, `mcp.test.ts`, `swarm.test.ts` - 22 tests).
-- **`@opentalon/skill-engine`**: Verified `SKILL.md` parsing, zero-trust sandbox execution, capability violation rejection, VirtualFs directory traversal protection, SHA-256 versioning and rollback, and full verification across **6 production skills** in the gallery (`skill-engine.test.ts`, `virtual-fs.test.ts`, `production-skills.test.ts` - 23 tests).
-- **`@opentalon/gateway`**: Verified local daemon HTTP routing (`/health`, `/v1/chat`, `/v1/stream`, `/api/stats`, `/api/traces`, `/api/skills`, `/api/skills/test`), serverless edge adapter, SSE token streaming, and zero-dependency Web Cockpit Dashboard (`gateway.test.ts`, `streaming.test.ts`, `dashboard.test.ts` - 17 tests).
+### Test Coverage Highlights (139 Tests Across 21 Suites)
+- **`@opentalon/memory`**: Verified FTS5 full-text indexing, vector cosine distance, RRF score ordering, episodic traces, semantic facts, and **A2A SQLite storage (`agent_identity`, `federated_peers`, `a2a_audit_logs`)** (13 tests).
+- **`@opentalon/core`**: Verified Fast Path token budget truncation (<1,500 tokens), hybrid retrieval, LLM tool-calling loops, mock driver fallback, Hermes Evolution reflection, speculative multi-draft tournament benchmarking, MCP JSON-RPC 2.0 protocols, Cron scheduler, Gemini Agent Booster dynamic thinking entropy scorer, canonical KV-cache prefix locking, Swarm multi-agent orchestration, and **A2A Ed25519 cryptographic signing, nonce deduplication, and SwarmDirector remote federation** (80 tests across 11 files).
+- **`@opentalon/skill-engine`**: Verified `SKILL.md` parsing, zero-trust sandbox execution, capability violation rejection, VirtualFs directory traversal protection, SHA-256 versioning and rollback, remote skill installer, skill chaining, and full verification across **11 production skills** in the gallery (40 tests across 6 files).
+- **`@opentalon/gateway`**: Verified local daemon HTTP routing (`/health`, `/v1/chat`, `/v1/stream`, `/api/stats`, `/api/traces`, `/api/skills`, `/api/skills/test`), serverless edge adapter, SSE token streaming, 9-Tab Web Cockpit Dashboard, and **A2A protocol gateway endpoints (`/.well-known/agent.json`, `/api/a2a/negotiate`, `/api/a2a/dispatch`, `/api/a2a/peers`, `/api/a2a/ping`, `/api/a2a/logs`)** (25 tests across 3 files).

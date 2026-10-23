@@ -14,16 +14,18 @@
   - `TokenBudgeter` & `ContextCacheManager`: Canonical tool/fact sorting, SHA-256 prefix hashing, automatic Gemini `cachedContents` lifecycle after 2 identical prefix hits, and automatic model availability fallback (`gemini-4-pro` / `gemini-4-argon` -> `gemini-3.8-flash`).
   - `FinOpsBudgetTracker`: Per-model USD cost tracking, KV-cache USD savings calculation, and automatic Frugal Mode when daily spend reaches >= 80% of budget.
   - `EvolutionEngine`: Closed-loop skill synthesis (`evolveOpportunity`) and speculative multi-draft tournament evolution (`evolveOpportunitySpeculative`) across parallel temperatures `0.1`–`0.9`.
-  - `SwarmCoordinator`: Multi-agent delegation across specialized subagent roles.
+  - `AgentIdentityManager`: Ed25519 cryptographic keypair generator, canonical JSON signing, `X-Talon-*` request headers, replay attack shield (nonce deduplication cache + ±60s clock skew check), and `/.well-known/agent.json` Agent Card specification.
+  - `SwarmCoordinator` & `SwarmDirector`: Multi-agent delegation across specialized local subagent roles and remote federated peer dispatch with circular delegation loop prevention (`delegationDepth <= 3`).
 - `@opentalon/memory` (`packages/memory`):
   - 3-Tier Unified LibSQL Memory (`UnifiedMemoryManager`): Tier-1 Episodic FTS5 sessions, Tier-2 Vector RAG (`F32_BLOB` cosine similarity), and Tier-3 Semantic Knowledge Graph (`semantic_facts`).
+  - A2A Mesh Storage: Asymmetric Ed25519 identity store (`agent_identity`), federated peer registry (`federated_peers`), and cryptographic audit trail (`a2a_audit_logs`).
 - `@opentalon/skill-engine` (`packages/skill-engine`):
   - Zero-Trust `SecurityGate` (12 static vulnerability patterns + prompt injection sanitizer) and `SandboxedVmRunner` (`node:vm` isolated execution with strict timeout & memory caps).
   - Native `SKILL.md` parser compatible with OpenClaw and Hermes skills.
 - `@opentalon/gateway` (`packages/gateway`):
-  - Real-time SSE streaming server, interactive Web Control Plane Dashboard with multimodal drag/attach support, WhatsApp/Telegram webhook adapters, and REST endpoints (`/api/chat`, `/api/booster/stats`, `/api/finops/report`).
+  - Real-time SSE streaming server, interactive Web Control Plane Dashboard (3D live hero, A2A Mesh Cockpit, MCP Hub, cron scheduler, multimodal playground), WhatsApp/Telegram webhook adapters, and REST endpoints (`/api/chat`, `/.well-known/agent.json`, `/api/a2a/negotiate`, `/api/a2a/dispatch`, `/api/a2a/peers`, `/api/a2a/ping`, `/api/a2a/logs`).
 - `talon` (`packages/cli`):
-  - Developer CLI & TUI (`talon chat`, `talon serve`, `talon evolve --speculative 3`, `talon booster`, `talon finops`, `talon stats`, `talon doctor`).
+  - Developer CLI & TUI (`talon chat`, `talon serve`, `talon evolve --speculative 3`, `talon booster`, `talon finops`, `talon stats`, `talon a2a identity`, `talon a2a peers`, `talon a2a register`, `talon a2a ping`, `talon a2a dispatch`, `talon doctor`).
 
 ## Quick Links for AI Agents & Contributors
 

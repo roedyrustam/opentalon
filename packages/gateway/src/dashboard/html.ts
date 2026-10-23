@@ -337,6 +337,7 @@ export function getDashboardHtml(): string {
       <button class="tab-btn" onclick="switchTab('facts')">Semantic Memory</button>
       <button class="tab-btn" onclick="switchTab('chat')">Live Playground</button>
       <button class="tab-btn" onclick="switchTab('automations')">Automations & Cron</button>
+      <button class="tab-btn" onclick="switchTab('a2a')">A2A Mesh</button>
     </nav>
   </header>
 
@@ -898,6 +899,129 @@ export function getDashboardHtml(): string {
         </table>
       </div>
     </section>
+
+    <!-- TAB 9: A2A MESH FEDERATION -->
+    <section id="a2a" class="tab-content">
+      <!-- Node Identity Hero Card -->
+      <div style="background: radial-gradient(circle at 85% 50%, rgba(16, 185, 129, 0.15), transparent 50%), radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 50%), #0e1422; border: 1px solid var(--card-border); border-radius: 16px; padding: 1.5rem 2rem; margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.5rem; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);">
+        <div style="flex: 1; min-width: 320px;">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 10px #10b981;"></span>
+            <span style="font-family: var(--font-mono); font-size: 0.75rem; color: #10b981; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;">A2A Protocol &amp; Peer-to-Peer Mesh Node</span>
+          </div>
+          <h2 style="font-size: 1.65rem; font-weight: 900; letter-spacing: -0.02em; margin-bottom: 0.4rem;" id="a2a-node-name">
+            OpenTalon Node
+          </h2>
+          <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+            <span id="a2a-node-urn" class="badge badge-purple" style="font-family: var(--font-mono); font-size: 0.8rem;">urn:talon:agent:loading...</span>
+            <span id="a2a-node-status" class="badge badge-success">Online &amp; Federated</span>
+            <span id="a2a-node-version" class="badge badge-blue">v0.6.0</span>
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; max-width: 700px;">
+            Decentralized agent-to-agent federation with cryptographic Ed25519 signatures, 0-token capability negotiation, and anti-deadlock remote delegation.
+          </p>
+          <div style="margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+            <a href="/.well-known/agent.json" target="_blank" class="btn" style="padding: 0.4rem 0.85rem; font-size: 0.775rem; text-decoration: none; display: inline-flex; align-items: center; gap: 0.4rem; background: #1f2937; border: 1px solid var(--card-border);">
+              🌐 View Agent Card (/.well-known/agent.json)
+            </a>
+            <button class="btn" style="padding: 0.4rem 0.85rem; font-size: 0.775rem; background: #374151;" onclick="copyPublicKey()">
+              📋 Copy Ed25519 Public Key
+            </button>
+          </div>
+        </div>
+        <div style="background: rgba(17, 24, 39, 0.9); border: 1px solid var(--card-border); border-radius: 12px; padding: 1rem 1.25rem; max-width: 420px; width: 100%;">
+          <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.4rem;">
+            Node Cryptographic Signature Key
+          </div>
+          <pre id="a2a-public-key-preview" style="font-size: 0.7rem; color: #a5f3fc; line-height: 1.4; max-height: 90px; overflow-y: auto; margin-bottom: 0.5rem; word-break: break-all; white-space: pre-wrap;">Loading Ed25519 public key...</pre>
+          <div style="font-size: 0.7rem; color: var(--text-muted);">
+            Algorithm: <code>Ed25519 / RFC 8032</code> &bull; Replay Shield: <code>Nonce Cache (&plusmn;60s)</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- Registration Modal / Form -->
+      <div id="a2a-register-modal" class="card" style="display: none; margin-bottom: 1.5rem; border-color: #3b82f6;">
+        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Register New Federated Peer</span>
+          <button class="btn" style="background: #374151; padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="closeRegisterPeerModal()">✕</button>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Connect to any remote OpenTalon node. OpenTalon will automatically query <code>/.well-known/agent.json</code> on the remote endpoint to discover its skills and Ed25519 public key.
+        </p>
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.35rem;">Remote Endpoint URL (e.g. http://192.168.1.50:3100):</label>
+            <input type="text" id="a2a-reg-endpoint" class="chat-input" placeholder="http://192.168.1.50:3100" style="width: 100%;" />
+          </div>
+          <div>
+            <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.35rem;">Peer Name (Optional):</label>
+            <input type="text" id="a2a-reg-name" class="chat-input" placeholder="e.g. Talon Edge Worker" style="width: 100%;" />
+          </div>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+          <button class="btn" style="background: #374151; padding: 0.45rem 1rem;" onclick="closeRegisterPeerModal()">Cancel</button>
+          <button class="btn" style="padding: 0.45rem 1.25rem; background: linear-gradient(135deg, #10b981, #059669);" onclick="submitRegisterPeer()">Auto-Discover &amp; Connect Peer</button>
+        </div>
+      </div>
+
+      <!-- Federated Peers Mesh Table -->
+      <div class="card">
+        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <span>Federated Peers Mesh</span>
+            <span id="a2a-peer-count-badge" class="badge badge-blue">0 Peers</span>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; background: linear-gradient(135deg, #3b82f6, #2563eb);" onclick="openRegisterPeerModal()">+ Register Peer</button>
+            <button class="btn" style="background: #374151; padding: 0.35rem 0.75rem; font-size: 0.75rem;" onclick="loadA2APeers()">Refresh</button>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Name &amp; URN</th>
+              <th>Endpoint URL</th>
+              <th>Latency</th>
+              <th>Advertised Capabilities</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="a2a-peers-table-body">
+            <tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No federated peers registered yet. Click "+ Register Peer" to link your first daemon!</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- A2A Protocol Audit Logs -->
+      <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <span>Cryptographic A2A Audit Logs</span>
+            <span class="badge badge-purple">Zero-Trust Verified</span>
+          </div>
+          <button class="btn" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; background: #374151;" onclick="loadA2AAuditLogs()">Refresh Logs</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Direction</th>
+              <th>Action</th>
+              <th>Peer / Caller</th>
+              <th>Status</th>
+              <th>Latency</th>
+              <th>Trace ID</th>
+            </tr>
+          </thead>
+          <tbody id="a2a-logs-table-body">
+            <tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1rem;">No A2A cryptographic transactions recorded yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </main>
 
   <script>
@@ -918,6 +1042,7 @@ export function getDashboardHtml(): string {
       if (tabId === 'mcp') loadMcpTools();
       if (tabId === 'facts') loadFacts();
       if (tabId === 'automations') loadAutomations();
+      if (tabId === 'a2a') loadA2AMesh();
     }
 
     async function loadStats() {
@@ -2239,6 +2364,201 @@ export function getDashboardHtml(): string {
           if (activeTab === 'automations') loadAutomations();
         });
       } catch (e) {}
+    }
+
+    // A2A Mesh Federation Controller
+    let cachedA2APublicKey = '';
+
+    async function loadA2AMesh() {
+      await Promise.all([
+        loadA2AIdentity(),
+        loadA2APeers(),
+        loadA2AAuditLogs(),
+      ]);
+    }
+
+    async function loadA2AIdentity() {
+      try {
+        const res = await fetch('/.well-known/agent.json');
+        if (!res.ok) return;
+        const card = await res.json();
+        cachedA2APublicKey = card.publicKey || '';
+        const nameEl = document.getElementById('a2a-node-name');
+        const urnEl = document.getElementById('a2a-node-urn');
+        const statusEl = document.getElementById('a2a-node-status');
+        const verEl = document.getElementById('a2a-node-version');
+        const keyEl = document.getElementById('a2a-public-key-preview');
+
+        if (nameEl) nameEl.innerText = card.name || 'OpenTalon Node';
+        if (urnEl) urnEl.innerText = card.urn || 'urn:talon:agent';
+        if (statusEl) statusEl.innerText = (card.status || 'online').toUpperCase();
+        if (verEl) verEl.innerText = 'v' + (card.version || '0.6.0');
+        if (keyEl) keyEl.innerText = card.publicKey || 'No key loaded';
+      } catch (e) {
+        console.error('Failed to load A2A Identity:', e);
+      }
+    }
+
+    function copyPublicKey() {
+      if (!cachedA2APublicKey) {
+        alert('Public key is not loaded yet');
+        return;
+      }
+      navigator.clipboard.writeText(cachedA2APublicKey).then(() => {
+        alert('Ed25519 Public Key copied to clipboard!');
+      }).catch(() => {
+        prompt('Copy your Ed25519 Public Key:', cachedA2APublicKey);
+      });
+    }
+
+    function openRegisterPeerModal() {
+      const modal = document.getElementById('a2a-register-modal');
+      if (modal) modal.style.display = 'block';
+    }
+
+    function closeRegisterPeerModal() {
+      const modal = document.getElementById('a2a-register-modal');
+      if (modal) modal.style.display = 'none';
+      const ep = document.getElementById('a2a-reg-endpoint');
+      const name = document.getElementById('a2a-reg-name');
+      if (ep) ep.value = '';
+      if (name) name.value = '';
+    }
+
+    async function submitRegisterPeer() {
+      const endpoint = document.getElementById('a2a-reg-endpoint')?.value.trim();
+      const name = document.getElementById('a2a-reg-name')?.value.trim();
+      if (!endpoint) {
+        alert('Please enter a valid remote endpoint URL.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/a2a/peers/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpointUrl: endpoint, name: name || undefined }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert('Failed to register peer: ' + (data.error || 'Unknown error'));
+          return;
+        }
+        closeRegisterPeerModal();
+        await loadA2APeers();
+        alert('Peer registered successfully: ' + data.name);
+      } catch (err) {
+        alert('Network error registering peer: ' + err.message);
+      }
+    }
+
+    async function loadA2APeers() {
+      const tbody = document.getElementById('a2a-peers-table-body');
+      if (!tbody) return;
+
+      try {
+        const res = await fetch('/api/a2a/peers');
+        const peers = await res.json();
+        const badge = document.getElementById('a2a-peer-count-badge');
+        if (badge) badge.innerText = (peers?.length || 0) + ' Peers';
+
+        if (!peers || peers.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No federated peers registered yet. Click "+ Register Peer" to link your first daemon!</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = peers.map(p => {
+          const statusBadge = p.status === 'online'
+            ? '<span class="badge badge-success">Online</span>'
+            : p.status === 'unreachable'
+            ? '<span class="badge" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24;">Unreachable</span>'
+            : '<span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #f87171;">Offline</span>';
+
+          const caps = (p.capabilities || []).map(c =>
+            '<span class="badge badge-blue" style="margin-right: 0.25rem;">' + escapeHtml(c) + '</span>'
+          ).join('') || '<span style="color: var(--text-muted); font-size: 0.75rem;">None</span>';
+
+          const latencyStr = p.latencyMs != null ? p.latencyMs + 'ms' : '--';
+
+          return '<tr>' +
+            '<td>' + statusBadge + '</td>' +
+            '<td><strong style="color: #fff;">' + escapeHtml(p.name) + '</strong><br><span style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">' + escapeHtml(p.peerId) + '</span></td>' +
+            '<td><code style="font-size: 0.8rem;">' + escapeHtml(p.endpointUrl) + '</code></td>' +
+            '<td class="tabular-nums" style="font-size: 0.85rem;">' + latencyStr + '</td>' +
+            '<td style="max-width: 250px; overflow-x: auto;">' + caps + '</td>' +
+            '<td style="white-space: nowrap;">' +
+              '<button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.35rem;" onclick="pingPeerFromUi(\'' + escapeHtml(p.peerId) + '\')">Ping</button>' +
+              '<button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: #991b1b;" onclick="deletePeerFromUi(\'' + escapeHtml(p.peerId) + '\')">Del</button>' +
+            '</td>' +
+          '</tr>';
+        }).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" style="color: #ef4444; text-align: center;">Error loading peers: ' + e.message + '</td></tr>';
+      }
+    }
+
+    async function pingPeerFromUi(peerId) {
+      try {
+        const res = await fetch('/api/a2a/ping', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ peerId }),
+        });
+        const result = await res.json();
+        await loadA2APeers();
+        alert('Ping result for ' + peerId + ': ' + result.status + (result.latencyMs != null ? ' (' + result.latencyMs + 'ms)' : ''));
+      } catch (e) {
+        alert('Ping failed: ' + e.message);
+      }
+    }
+
+    async function deletePeerFromUi(peerId) {
+      if (!confirm('Are you sure you want to remove peer "' + peerId + '" from the mesh?')) return;
+      try {
+        const res = await fetch('/api/a2a/peers/' + encodeURIComponent(peerId), { method: 'DELETE' });
+        await res.json();
+        await loadA2APeers();
+      } catch (e) {
+        alert('Failed to delete peer: ' + e.message);
+      }
+    }
+
+    async function loadA2AAuditLogs() {
+      const tbody = document.getElementById('a2a-logs-table-body');
+      if (!tbody) return;
+
+      try {
+        const res = await fetch('/api/a2a/logs?limit=30');
+        const logs = await res.json();
+
+        if (!logs || logs.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1rem;">No A2A cryptographic transactions recorded yet.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = logs.map(l => {
+          const time = new Date(l.timestamp).toLocaleTimeString();
+          const dirBadge = l.direction === 'inbound'
+            ? '<span class="badge badge-purple">Inbound</span>'
+            : '<span class="badge badge-blue">Outbound</span>';
+
+          const statusBadge = (l.status === 'granted' || l.status === 'success')
+            ? '<span class="badge badge-success">' + escapeHtml(l.status) + '</span>'
+            : '<span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #f87171;">' + escapeHtml(l.status) + '</span>';
+
+          return '<tr>' +
+            '<td class="tabular-nums" style="font-size: 0.8rem;">' + time + '</td>' +
+            '<td>' + dirBadge + '</td>' +
+            '<td><code style="font-size: 0.8rem;">' + escapeHtml(l.action) + '</code></td>' +
+            '<td style="font-family: var(--font-mono); font-size: 0.75rem; color: #a5f3fc;">' + escapeHtml(l.peerId || '--') + '</td>' +
+            '<td>' + statusBadge + '</td>' +
+            '<td class="tabular-nums" style="font-size: 0.8rem;">' + (l.latencyMs != null ? l.latencyMs + 'ms' : '--') + '</td>' +
+            '<td style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">' + escapeHtml((l.traceId || '--').slice(0, 16)) + '</td>' +
+          '</tr>';
+        }).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="7" style="color: #ef4444; text-align: center;">Error loading A2A logs: ' + e.message + '</td></tr>';
+      }
     }
 
     // Auto-load on startup
