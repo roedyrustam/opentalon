@@ -1049,9 +1049,12 @@ export function getDashboardHtml(): string {
       try {
         const res = await fetch('/api/stats');
         const data = await res.json();
-        document.getElementById('stat-skills-count').innerText = data.skillsCount;
-        document.getElementById('stat-traces-count').innerText = data.tracesCount;
-        document.getElementById('stat-avg-latency').innerHTML = data.avgLatencyMs + ' <span style="font-size: 1rem; color: var(--text-muted);">ms</span>';
+        const skillsEl = document.getElementById('stat-skills-count');
+        if (skillsEl) skillsEl.innerText = data.skillsCount ?? 0;
+        const tracesEl = document.getElementById('stat-traces-count');
+        if (tracesEl) tracesEl.innerText = data.tracesCount ?? 0;
+        const latEl = document.getElementById('stat-avg-latency');
+        if (latEl) latEl.innerHTML = (data.avgLatencyMs ?? 0) + ' <span style="font-size: 1rem; color: var(--text-muted);">ms</span>';
         const factsEl = document.getElementById('stat-facts-count');
         if (factsEl) factsEl.innerText = data.factsCount ?? 0;
         if (data.booster) {
@@ -1069,6 +1072,7 @@ export function getDashboardHtml(): string {
             avgThinkEl.innerHTML = (data.booster.avgThinkingBudget || 0).toLocaleString() + ' <span style="font-size: 1rem; color: var(--text-muted);">tokens</span>';
           }
         }
+        console.log('[OpenTalon] Stats loaded:', data);
       } catch (e) {
         console.error('Failed to load stats', e);
       }
@@ -2125,12 +2129,12 @@ export function getDashboardHtml(): string {
       if (nameInput) nameInput.value = name;
       if (exprInput) exprInput.value = cron;
       const radios = document.querySelectorAll('input[name="cronActionType"]');
-      radios.forEach((r) => { (r as HTMLInputElement).checked = ((r as HTMLInputElement).value === actionType); });
+      radios.forEach((r) => { r.checked = (r.value === actionType); });
       toggleCronActionTypeInputs();
 
       if (actionType === 'prompt') {
         const pInput = document.getElementById('cron-prompt-input');
-        if (pInput) pInput.value = payload.prompt || '';
+        if (pInput) pInput.value = (payload && payload.prompt) || '';
       } else {
         const sInput = document.getElementById('cron-skill-name-input');
         const aInput = document.getElementById('cron-skill-args-input');
@@ -2140,9 +2144,9 @@ export function getDashboardHtml(): string {
     }
 
     async function submitNewCronJob() {
-      const name = (document.getElementById('cron-name-input') as HTMLInputElement).value.trim();
-      const cron = (document.getElementById('cron-expr-input') as HTMLInputElement).value.trim();
-      const checked = document.querySelector('input[name="cronActionType"]:checked') as HTMLInputElement;
+      const name = (document.getElementById('cron-name-input')?.value || '').trim();
+      const cron = (document.getElementById('cron-expr-input')?.value || '').trim();
+      const checked = document.querySelector('input[name="cronActionType"]:checked');
       const actionType = checked ? checked.value : 'prompt';
 
       if (!name || !cron) {
@@ -2150,24 +2154,24 @@ export function getDashboardHtml(): string {
         return;
       }
 
-      let actionPayload: any = {};
+      let actionPayload = {};
       if (actionType === 'prompt') {
-        const prompt = (document.getElementById('cron-prompt-input') as HTMLTextAreaElement).value.trim();
+        const prompt = (document.getElementById('cron-prompt-input')?.value || '').trim();
         if (!prompt) {
           alert('Please enter a prompt instruction.');
           return;
         }
         actionPayload = { prompt };
       } else {
-        const skillName = (document.getElementById('cron-skill-name-input') as HTMLInputElement).value.trim();
-        const argsStr = (document.getElementById('cron-skill-args-input') as HTMLInputElement).value.trim() || '{}';
+        const skillName = (document.getElementById('cron-skill-name-input')?.value || '').trim();
+        const argsStr = (document.getElementById('cron-skill-args-input')?.value || '').trim() || '{}';
         if (!skillName) {
           alert('Please enter a skill name.');
           return;
         }
         try {
           actionPayload = { skillName, args: JSON.parse(argsStr) };
-        } catch (e: any) {
+        } catch (e) {
           alert('Invalid JSON in skill arguments: ' + e.message);
           return;
         }
@@ -2193,7 +2197,7 @@ export function getDashboardHtml(): string {
         }
         closeNewCronModal();
         loadAutomations();
-      } catch (e: any) {
+      } catch (e) {
         alert('Error: ' + e.message);
       }
     }
@@ -2205,7 +2209,7 @@ export function getDashboardHtml(): string {
         const res = await fetch('/api/cron/jobs');
         const jobs = await res.json();
         const badge = document.getElementById('cron-active-count-badge');
-        if (badge) badge.innerText = jobs.length + ' Jobs';
+        if (badge) badge.innerText = (jobs ? jobs.length : 0) + ' Jobs';
 
         if (!jobs || jobs.length === 0) {
           tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No background automations registered yet. Use presets above or click "+ New Automation".</td></tr>';
@@ -2213,7 +2217,7 @@ export function getDashboardHtml(): string {
           return;
         }
 
-        tbody.innerHTML = jobs.map((j: any) => {
+        tbody.innerHTML = jobs.map((j) => {
           const isPaused = j.status === 'paused';
           const statusBadge = isPaused 
             ? '<span class="badge" style="background: rgba(107, 114, 128, 0.2); color: #9ca3af;">Paused</span>' 
@@ -2240,23 +2244,23 @@ export function getDashboardHtml(): string {
         }).join('');
 
         loadCronLogs();
-      } catch (e: any) {
+      } catch (e) {
         tbody.innerHTML = '<tr><td colspan="7" style="color: #ef4444; text-align: center;">Error loading automations: ' + e.message + '</td></tr>';
       }
     }
 
-    async function triggerCronJob(id: string) {
+    async function triggerCronJob(id) {
       try {
         const res = await fetch('/api/cron/jobs/' + encodeURIComponent(id) + '/trigger', { method: 'POST' });
         const log = await res.json();
         loadAutomations();
         showCronAlert('Triggered job manually', 'Result: ' + log.status + ' (Duration: ' + log.durationMs + 'ms)');
-      } catch (e: any) {
+      } catch (e) {
         alert('Trigger failed: ' + e.message);
       }
     }
 
-    async function toggleCronJob(id: string, active: boolean) {
+    async function toggleCronJob(id, active) {
       try {
         await fetch('/api/cron/jobs/' + encodeURIComponent(id) + '/toggle', {
           method: 'POST',
@@ -2264,17 +2268,17 @@ export function getDashboardHtml(): string {
           body: JSON.stringify({ active }),
         });
         loadAutomations();
-      } catch (e: any) {
+      } catch (e) {
         alert('Toggle failed: ' + e.message);
       }
     }
 
-    async function deleteCronJob(id: string) {
+    async function deleteCronJob(id) {
       if (!confirm('Are you sure you want to delete this scheduled automation?')) return;
       try {
         await fetch('/api/cron/jobs/' + encodeURIComponent(id), { method: 'DELETE' });
         loadAutomations();
-      } catch (e: any) {
+      } catch (e) {
         alert('Delete failed: ' + e.message);
       }
     }
@@ -2290,7 +2294,7 @@ export function getDashboardHtml(): string {
           return;
         }
 
-        tbody.innerHTML = logs.map((l: any) => {
+        tbody.innerHTML = logs.map((l) => {
           const time = new Date(l.startedAt).toLocaleTimeString();
           const statusBadge = l.status === 'success' 
             ? '<span class="badge badge-success">success</span>' 
@@ -2307,12 +2311,12 @@ export function getDashboardHtml(): string {
             '<td style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="' + escapeHtml(detail) + '">' + escapeHtml(preview) + '</td>' +
           '</tr>';
         }).join('');
-      } catch (e: any) {
+      } catch (e) {
         tbody.innerHTML = '<tr><td colspan="6" style="color: #ef4444; text-align: center;">Error loading logs: ' + e.message + '</td></tr>';
       }
     }
 
-    function showCronAlert(title: string, desc: string) {
+    function showCronAlert(title, desc) {
       const banner = document.getElementById('cron-alert-banner');
       const titleEl = document.getElementById('cron-alert-title');
       const descEl = document.getElementById('cron-alert-desc');
@@ -2487,8 +2491,8 @@ export function getDashboardHtml(): string {
             '<td class="tabular-nums" style="font-size: 0.85rem;">' + latencyStr + '</td>' +
             '<td style="max-width: 250px; overflow-x: auto;">' + caps + '</td>' +
             '<td style="white-space: nowrap;">' +
-              '<button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.35rem;" onclick="pingPeerFromUi(\'' + escapeHtml(p.peerId) + '\')">Ping</button>' +
-              '<button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: #991b1b;" onclick="deletePeerFromUi(\'' + escapeHtml(p.peerId) + '\')">Del</button>' +
+              '<button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.35rem;" onclick="pingPeerFromUi(\\'' + escapeHtml(p.peerId) + '\\')">Ping</button>' +
+              '<button class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: #991b1b;" onclick="deletePeerFromUi(\\'' + escapeHtml(p.peerId) + '\\')">Del</button>' +
             '</td>' +
           '</tr>';
         }).join('');
