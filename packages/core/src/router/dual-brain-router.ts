@@ -147,7 +147,11 @@ export class DualBrainRouter extends EventEmitter {
 
     // 2. Hybrid Search for top-K procedural skills in Memory
     const searchResults = await this.memory.searchSkillsHybrid(input, queryEmbedding, topK);
-    const retrievedSkills = searchResults.map((r) => r.item);
+    let retrievedSkills = searchResults.map((r) => r.item);
+    if (options.skillsFilter && options.skillsFilter.length > 0) {
+      const allowed = new Set(options.skillsFilter);
+      retrievedSkills = retrievedSkills.filter((s) => allowed.has(s.name));
+    }
 
     // 2b. Retrieve relevant Semantic Facts (Knowledge & Preferences)
     const topKFacts = options.topKFacts ?? 3;

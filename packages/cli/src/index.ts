@@ -19,11 +19,15 @@ import {
   CronScheduler,
   ContextCacheManager,
   ThinkingBudgetCalculator,
+  AgentIdentityManager,
   type ChatMessage,
   type ILLMPort,
   type CascadeProvider,
+  type AgentCard,
+  type A2ADispatchRequest,
+  type A2ADispatchResponse,
 } from '@opentalon/core';
-import { LibSqlMemoryAdapter } from '@opentalon/memory';
+import { LibSqlMemoryAdapter, type FederatedPeer } from '@opentalon/memory';
 import { SandboxedVmRunner, RemoteSkillInstaller } from '@opentalon/skill-engine';
 import { LocalDaemonAdapter } from '@opentalon/gateway';
 
@@ -169,10 +173,11 @@ function getComponents(dbPath = 'opentalon.db') {
     });
   }
 
-  const swarmDirector = new SwarmDirector(llm, workerLLM);
+  const identityManager = new AgentIdentityManager(memory);
+  const swarmDirector = new SwarmDirector(llm, workerLLM, identityManager);
   const scheduler = new CronScheduler({ memory, router, sandbox });
 
-  return { memory, sandbox, llm, router, evolutionEngine, mcpServer, swarmDirector, scheduler };
+  return { memory, sandbox, llm, router, evolutionEngine, mcpServer, swarmDirector, scheduler, identityManager };
 }
 
 // 1. `talon init`
@@ -1943,6 +1948,198 @@ program
       console.log(`💡 Tip: The whole repository is now cached in Google AI infrastructure with zero loss!\n`);
     } else {
       console.log(`⚠️ Context Cache could not be provisioned (Check API permissions or model availability).\n`);
+    }
+  });
+
+// 21. `talon a2a` (Agent-to-Agent Protocol & Mesh Federation)
+const a2aCmd = program
+  .command('a2a')
+  .description('🦅 A2A (Agent-to-Agent) Protocol & Peer-to-Peer Mesh Federation Commands');
+
+// talon a2a identity
+a2aCmd
+  .command('identity')
+  .description("Display this OpenTalon node's Ed25519 cryptographic identity and Agent Card")
+  .action(async () => {
+    const { memory, identityManager } = getComponents();
+    await memory.initialize();
+    const identity = await identityManager.getOrCreateIdentity();
+    const skills = await memory.listSkills();
+
+    console.log('\n🦅 OpenTalon Node Identity & Agent Card:');
+    console.log(`   URN        : \x1b[36m${identity.id}\x1b[0m`);
+    console.log(`   Name       : \x1b[32m${identity.name}\x1b[0m`);
+    console.log(
+      `   Public Key : \x1b[33m${AgentIdentityManager.cleanPublicKeyBase64(identity.publicKey).slice(0, 32)}...\x1b[0m`
+    );
+    console.log(`   Skills (${skills.length}) : ${skills.map((s) => s.name).join(', ') || 'none'}`);
+    console.log(`   Created At : ${new Date(identity.createdAt).toISOString()}\n`);
+    await memory.close();
+  });
+
+// talon a2a peers
+a2aCmd
+  .command('peers')
+  .description('List all discovered and registered peers in the P2P mesh network')
+  .action(async () => {
+    const { memory } = getComponents();
+    await memory.initialize();
+    const peers = await memory.listFederatedPeers();
+
+    console.log(`\n🌐 OpenTalon Federated Mesh (${peers.length} Peers Registered):`);
+    if (peers.length === 0) {
+      console.log('   No peers registered yet. Use `talon a2a register <endpointUrl>` to join peers.\n');
+    } else {
+      for (const p of peers) {
+        const statusColor =
+          p.status === 'online' ? '\x1b[32m● online\x1b[0m' : '\x1b[31m○ offline\x1b[0m';
+        const latencyStr = p.latencyMs !== undefined ? `${Math.round(p.latencyMs)}ms` : 'unknown';
+        console.log(`   ${statusColor} \x1b[1m${p.name}\x1b[0m (\x1b[36m${p.peerId}\x1b[0m)`);
+        console.log(`      Endpoint : ${p.endpointUrl}`);
+        console.log(`      Latency  : ${latencyStr}`);
+        console.log(`      Skills   : ${p.capabilities.join(', ') || 'none'}`);
+        console.log(`      Last Seen: ${new Date(p.lastSeenAt).toLocaleTimeString()}`);
+      }
+      console.log('');
+    }
+    await memory.close();
+  });
+
+// talon a2a register <endpointUrl>
+a2aCmd
+  .command('register <endpointUrl>')
+  .description('Discover and register a remote OpenTalon node via its /.well-known/agent.json')
+  .action(async (endpointUrl: string) => {
+    const { memory } = getComponents();
+    await memory.initialize();
+
+    console.log(`\n🔍 Discovering peer at ${endpointUrl}...`);
+    const cardUrl = endpointUrl.replace(/\/$/, '') + '/.well-known/agent.json';
+    try {
+      const start = Date.now();
+      const res = await fetch(cardUrl, { signal: AbortSignal.timeout(5000) });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      const card = (await res.json()) as AgentCard;
+      const latencyMs = Date.now() - start;
+
+      const peer: FederatedPeer = {
+        peerId: card.urn,
+        name: card.name,
+        endpointUrl,
+        publicKey: card.publicKey,
+        capabilities: card.skills.map((s) => s.name),
+        status: 'online',
+        latencyMs,
+        lastSeenAt: Date.now(),
+      };
+
+      await memory.saveFederatedPeer(peer);
+      console.log(`\x1b[32m✅ Successfully registered peer:\x1b[0m ${card.name} (${card.urn})`);
+      console.log(`   Skills : ${peer.capabilities.join(', ') || 'none'}`);
+      console.log(`   Latency: ${Math.round(latencyMs)}ms\n`);
+    } catch (err: unknown) {
+      console.error(
+        `\x1b[31m❌ Failed to register peer:\x1b[0m`,
+        err instanceof Error ? err.message : String(err)
+      );
+    } finally {
+      await memory.close();
+    }
+  });
+
+// talon a2a ping <peerIdOrUrl>
+a2aCmd
+  .command('ping <peerIdOrUrl>')
+  .description('Ping a registered peer to measure network latency and update its online status')
+  .action(async (peerIdOrUrl: string) => {
+    const { memory } = getComponents();
+    await memory.initialize();
+    const peer = await memory.getFederatedPeer(peerIdOrUrl);
+    if (!peer) {
+      console.error(`❌ Peer "${peerIdOrUrl}" not found in registry.`);
+      await memory.close();
+      return;
+    }
+
+    console.log(`📡 Pinging ${peer.name} (${peer.endpointUrl})...`);
+    const start = Date.now();
+    try {
+      const pingRes = await fetch(peer.endpointUrl.replace(/\/$/, '') + '/healthz', {
+        signal: AbortSignal.timeout(4000),
+      });
+      const latency = Date.now() - start;
+      const status = pingRes.ok ? 'online' : 'unreachable';
+      await memory.updatePeerStatus(peer.peerId, status, latency);
+      console.log(`✅ \x1b[32mPONG!\x1b[0m Status: ${status}, Latency: ${latency}ms\n`);
+    } catch {
+      await memory.updatePeerStatus(peer.peerId, 'offline');
+      console.log(`❌ \x1b[31mTarget unreachable.\x1b[0m Marked as offline.\n`);
+    } finally {
+      await memory.close();
+    }
+  });
+
+// talon a2a dispatch <peerIdOrUrl> <task>
+a2aCmd
+  .command('dispatch <peerIdOrUrl> <task>')
+  .description('Dispatch a signed task execution to a remote OpenTalon peer')
+  .action(async (peerIdOrUrl: string, task: string) => {
+    const { memory, identityManager } = getComponents();
+    await memory.initialize();
+    const peer = await memory.getFederatedPeer(peerIdOrUrl);
+    if (!peer) {
+      console.error(`❌ Peer "${peerIdOrUrl}" not found in registry.`);
+      await memory.close();
+      return;
+    }
+
+    console.log(`\n🚀 Dispatching task to \x1b[1m${peer.name}\x1b[0m (${peer.endpointUrl})...`);
+    console.log(`   Task: "${task}"`);
+
+    const dispatchUrl = peer.endpointUrl.replace(/\/$/, '') + '/api/a2a/dispatch';
+    const dispatchPayload: A2ADispatchRequest = {
+      taskId: `cli_dispatch_${Date.now()}`,
+      senderAgentId: (await identityManager.getOrCreateIdentity()).id,
+      task,
+      delegationDepth: 1,
+    };
+
+    const signed = await identityManager.signPayload(dispatchPayload);
+
+    try {
+      const start = Date.now();
+      const res = await fetch(dispatchUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Talon-Agent-Id': signed.agentId,
+          'X-Talon-Public-Key': signed.publicKey,
+          'X-Talon-Signature': signed.signature,
+          'X-Talon-Timestamp': String(signed.timestamp),
+          'X-Talon-Nonce': signed.nonce,
+        },
+        body: JSON.stringify(dispatchPayload),
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+      }
+
+      const response = (await res.json()) as A2ADispatchResponse;
+      console.log(`\n\x1b[32m✅ Task Completed Successfully!\x1b[0m (${Date.now() - start}ms)`);
+      console.log(`   Executor : ${response.executorPeerId}`);
+      console.log(`   Tokens   : ${response.tokensUsed.totalTokens} total`);
+      console.log(`\n📋 Output:\n${response.output}\n`);
+    } catch (err: unknown) {
+      console.error(
+        `\x1b[31m❌ Remote dispatch failed:\x1b[0m`,
+        err instanceof Error ? err.message : String(err)
+      );
+    } finally {
+      await memory.close();
     }
   });
 

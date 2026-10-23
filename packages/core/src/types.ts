@@ -118,6 +118,7 @@ export interface FastPathOptions {
   enableSearchGrounding?: boolean;
   autoSaveGroundedFacts?: boolean; // Default true when enableSearchGrounding is active
   thinkingConfig?: ThinkingConfig;
+  skillsFilter?: string[];
 }
 
 export interface FastPathResult {
