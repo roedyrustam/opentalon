@@ -4,7 +4,8 @@ export function getDashboardHtml(): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenTalon — Dual-Brain AI Agent Cockpit</title>
+  <title>OpenTalon — Dual-Brain AI Agent Cockpit (Hermes × OpenClaw)</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='116' fill='%23070a12'/%3E%3Cpolygon points='256,36 446,146 446,366 256,476 66,366 66,146' fill='none' stroke='%2310b981' stroke-width='8' stroke-dasharray='16 10'/%3E%3Cpath d='M190,235 L42,132 L78,188 L178,252 Z' fill='%2300f2fe'/%3E%3Cpath d='M322,235 L470,132 L434,188 L334,252 Z' fill='%23f59e0b'/%3E%3Cpath d='M256,184 A80,80 0 0,0 256,344 Z' fill='%2300f2fe'/%3E%3Cpath d='M256,184 A80,80 0 0,1 256,344 Z' fill='%23d946ef'/%3E%3Ccircle cx='256' cy='264' r='28' fill='%23fff'/%3E%3Cpath d='M226,74 L256,108 L286,74 L276,136 L256,198 L236,136 Z' fill='%23334155' stroke='%2300f2fe' stroke-width='6'/%3E%3C/svg%3E">
   <style>
     :root {
       --bg: #0b0f17;
@@ -297,23 +298,34 @@ export function getDashboardHtml(): string {
 
   <header>
     <div class="brand">
-      <svg viewBox="0 0 512 512" width="34" height="34" style="filter: drop-shadow(0 0 8px rgba(0, 242, 254, 0.7)); flex-shrink: 0;">
+      <svg viewBox="0 0 512 512" width="38" height="38" style="filter: drop-shadow(0 0 8px rgba(0, 242, 254, 0.7)); flex-shrink: 0;">
         <defs>
-          <linearGradient id="hbFast" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00f2fe"/><stop offset="100%" stop-color="#0072ff"/></linearGradient>
-          <linearGradient id="hbSlow" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#d946ef"/><stop offset="100%" stop-color="#8b5cf6"/></linearGradient>
-          <linearGradient id="hbClaw" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#475569"/><stop offset="100%" stop-color="#0f172a"/></linearGradient>
+          <linearGradient id="hbFast" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00f2fe"/><stop offset="100%" stop-color="#0051ff"/></linearGradient>
+          <linearGradient id="hbSlow" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f59e0b"/><stop offset="50%" stop-color="#ec4899"/><stop offset="100%" stop-color="#8b5cf6"/></linearGradient>
+          <linearGradient id="hbClaw" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#64748b"/><stop offset="100%" stop-color="#0f172a"/></linearGradient>
         </defs>
-        <ellipse cx="256" cy="256" rx="140" ry="50" fill="none" stroke="url(#hbFast)" stroke-width="8" stroke-dasharray="24 16" transform="rotate(-25 256 256)"/>
-        <ellipse cx="256" cy="256" rx="140" ry="50" fill="none" stroke="url(#hbSlow)" stroke-width="8" stroke-dasharray="24 16" transform="rotate(35 256 256)"/>
-        <path d="M 256,180 A 76,76 0 0,0 256,332 Z" fill="url(#hbFast)"/>
-        <path d="M 256,180 A 76,76 0 0,1 256,332 Z" fill="url(#hbSlow)"/>
-        <circle cx="256" cy="256" r="28" fill="#ffffff"/>
-        <path d="M 230,70 L 256,110 L 282,70 L 275,130 L 256,180 L 237,130 Z" fill="url(#hbClaw)" stroke="#38bdf8" stroke-width="4"/>
-        <g transform="rotate(-40 256 256)"><path d="M 235,90 L 256,130 L 277,95 L 268,150 L 256,195 L 244,150 Z" fill="url(#hbClaw)" stroke="#00f2fe" stroke-width="4"/></g>
-        <g transform="rotate(40 256 256)"><path d="M 235,90 L 256,130 L 277,95 L 268,150 L 256,195 L 244,150 Z" fill="url(#hbClaw)" stroke="#d946ef" stroke-width="4"/></g>
+        <!-- Zero-Trust Hexagonal Sandbox Shield -->
+        <polygon points="256,32 452,145 452,367 256,480 60,367 60,145" fill="none" stroke="#10b981" stroke-width="10" stroke-dasharray="22 14" opacity="0.7"/>
+        <!-- Hermes Cybernetic Talaria Wings -->
+        <path d="M 188,236 L 34,128 L 74,190 L 176,256 Z" fill="url(#hbFast)"/>
+        <path d="M 180,262 L 22,204 L 64,252 L 174,282 Z" fill="url(#hbFast)" opacity="0.85"/>
+        <path d="M 324,236 L 478,128 L 438,190 L 336,256 Z" fill="url(#hbSlow)"/>
+        <path d="M 332,262 L 490,204 L 448,252 L 338,282 Z" fill="url(#hbSlow)" opacity="0.85"/>
+        <!-- Caduceus Orbital Helices -->
+        <ellipse cx="256" cy="264" rx="148" ry="52" fill="none" stroke="url(#hbFast)" stroke-width="10" stroke-dasharray="24 14" transform="rotate(-26 256 264)"/>
+        <ellipse cx="256" cy="264" rx="148" ry="52" fill="none" stroke="url(#hbSlow)" stroke-width="10" stroke-dasharray="24 14" transform="rotate(26 256 264)"/>
+        <!-- Dual-Brain Core -->
+        <path d="M 256,184 A 80,80 0 0,0 256,344 Z" fill="url(#hbFast)"/>
+        <path d="M 256,184 A 80,80 0 0,1 256,344 Z" fill="url(#hbSlow)"/>
+        <circle cx="256" cy="264" r="28" fill="#ffffff"/>
+        <!-- OpenClaw Titanium Talons -->
+        <polygon points="256,38 278,66 256,92 234,66" fill="url(#hbSlow)"/>
+        <path d="M 226,74 L 256,110 L 286,74 L 276,136 L 256,196 L 236,136 Z" fill="url(#hbClaw)" stroke="#38bdf8" stroke-width="6"/>
+        <g transform="rotate(-42 256 264)"><path d="M 232,88 L 256,128 L 280,94 L 270,152 L 256,204 L 242,152 Z" fill="url(#hbClaw)" stroke="#00f2fe" stroke-width="6"/></g>
+        <g transform="rotate(42 256 264)"><path d="M 232,88 L 256,128 L 280,94 L 270,152 L 256,204 L 242,152 Z" fill="url(#hbClaw)" stroke="#f59e0b" stroke-width="6"/></g>
       </svg>
       <span>Open<span style="color: #00f2fe;">Talon</span></span>
-      <span class="brand-badge">Dual-Brain Engine</span>
+      <span class="brand-badge">Hermes × OpenClaw</span>
       <a href="/showcase" target="_blank" class="brand-badge" style="text-decoration: none; margin-left: 0.5rem; background: linear-gradient(135deg, #00f2fe, #d946ef);" title="Open Standalone 3D Holographic Core">3D Core ↗</a>
     </div>
     <nav>

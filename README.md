@@ -1,12 +1,16 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="OpenTalon Dual-Brain Logo" width="640" />
+  <img src="assets/logo.svg" alt="OpenTalon — Hermes × OpenClaw Dual-Brain Banner" width="820" />
 </p>
 
-<h1 align="center">🦅 OpenTalon (v0.5.0)</h1>
+<p align="center">
+  <img src="assets/opentalon-3d-master.jpg" alt="OpenTalon 3D Master Emblem — Hermes Wings & Caduceus DNA × OpenClaw Titanium Talon" width="380" style="border-radius: 24px;" />
+</p>
+
+<h1 align="center">🦅🪽 OpenTalon (v0.5.0)</h1>
 
 <p align="center">
-  <strong>The Self-Evolving, Hyper-Frugal & Zero-Trust Autonomous AI Agent Framework</strong><br>
-  <em>Combining Hermes-style procedural skill synthesis with OpenClaw token frugality (&lt;1,500 tokens/turn), Gemini Agent Booster (O(1) Thinking Budget + 90% KV-Cache), and an isolated Zero-Trust VM Sandbox.</em>
+  <strong>The Sovereign Fusion of Hermes Self-Evolution &amp; OpenClaw Token Frugality</strong><br>
+  <em>Combining <strong>Hermes</strong> (Cybernetic Wings &amp; Caduceus DNA closed-loop procedural skill evolution) with <strong>OpenClaw</strong> (Titanium Talon surgical tool grip, &lt;1,500 tokens/turn frugality &amp; Zero-Trust Hexagonal Sandbox) + <strong>Gemini Agent Booster</strong> (O(1) Thinking Budget &amp; 90% KV-Cache).</em>
 </p>
 
 <p align="center">

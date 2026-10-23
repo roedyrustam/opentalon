@@ -1,37 +1,61 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 280" width="100%" height="100%">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 300" width="100%" height="100%">
   <defs>
-    <!-- Gradients -->
-    <linearGradient id="logoFastGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#00f2fe"/>
-      <stop offset="100%" stop-color="#0072ff"/>
+    <!-- Banner Dark Background -->
+    <linearGradient id="bannerBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#070a12"/>
+      <stop offset="50%" stop-color="#0d1322"/>
+      <stop offset="100%" stop-color="#070a12"/>
     </linearGradient>
 
+    <!-- OpenClaw Fast Path Cyan Gradient -->
+    <linearGradient id="logoFastGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe"/>
+      <stop offset="55%" stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#0051ff"/>
+    </linearGradient>
+
+    <!-- Hermes Slow Path Gold-Violet Evolution Gradient -->
     <linearGradient id="logoSlowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#d946ef"/>
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="50%" stop-color="#ec4899"/>
       <stop offset="100%" stop-color="#8b5cf6"/>
     </linearGradient>
 
+    <!-- Hermes Wings Gradients -->
+    <linearGradient id="wingLeftGrad" x1="100%" y1="50%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#00f2fe" stop-opacity="0.95"/>
+      <stop offset="60%" stop-color="#3b82f6" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#1d4ed8" stop-opacity="0.25"/>
+    </linearGradient>
+
+    <linearGradient id="wingRightGrad" x1="0%" y1="50%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.95"/>
+      <stop offset="55%" stop-color="#d946ef" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#7c3aed" stop-opacity="0.25"/>
+    </linearGradient>
+
+    <!-- OpenClaw Titanium Armor -->
     <linearGradient id="metalDark" x1="20%" y1="0%" x2="80%" y2="100%">
-      <stop offset="0%" stop-color="#334155"/>
+      <stop offset="0%" stop-color="#475569"/>
       <stop offset="50%" stop-color="#1e293b"/>
-      <stop offset="100%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#090d16"/>
     </linearGradient>
 
     <linearGradient id="metalFacet" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#64748b"/>
+      <stop offset="0%" stop-color="#94a3b8"/>
       <stop offset="100%" stop-color="#1e293b"/>
     </linearGradient>
 
     <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="70%" stop-color="#f8fafc"/>
-      <stop offset="100%" stop-color="#94a3b8"/>
+      <stop offset="75%" stop-color="#f8fafc"/>
+      <stop offset="100%" stop-color="#cbd5e1"/>
     </linearGradient>
 
-    <!-- Neon Glow Filter -->
-    <filter id="logoGlow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="6" result="blur1"/>
-      <feGaussianBlur stdDeviation="15" result="blur2"/>
+    <!-- Glow Filter -->
+    <filter id="logoGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="5" result="blur1"/>
+      <feGaussianBlur stdDeviation="12" result="blur2"/>
       <feMerge>
         <feMergeNode in="blur2"/>
         <feMergeNode in="blur1"/>
@@ -40,91 +64,130 @@
     </filter>
 
     <style>
-      @keyframes spinOrbit1 {
-        0% { transform: rotate3d(1, 0.4, 0.2, 0deg); }
-        100% { transform: rotate3d(1, 0.4, 0.2, 360deg); }
+      @keyframes pulseCore {
+        0%, 100% { transform: scale(0.97); }
+        50% { transform: scale(1.04); }
       }
-      @keyframes spinOrbit2 {
-        0% { transform: rotate3d(0.3, 1, 0.5, 360deg); }
-        100% { transform: rotate3d(0.3, 1, 0.5, 0deg); }
+      @keyframes floatWing {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-4px); }
       }
-      @keyframes pulseSphere {
-        0%, 100% { transform: scale(0.96); opacity: 0.9; }
-        50% { transform: scale(1.04); opacity: 1; filter: drop-shadow(0 0 20px rgba(0, 242, 254, 0.8)); }
-      }
-      .anim-orbit-1 { transform-origin: 140px 140px; animation: spinOrbit1 12s linear infinite; }
-      .anim-orbit-2 { transform-origin: 140px 140px; animation: spinOrbit2 16s linear infinite; }
-      .anim-core-sphere { transform-origin: 140px 140px; animation: pulseSphere 3s ease-in-out infinite; }
+      .anim-core-sphere { transform-origin: 155px 154px; animation: pulseCore 3.5s ease-in-out infinite; }
+      .anim-wing-emblem { transform-origin: 155px 154px; animation: floatWing 4s ease-in-out infinite; }
     </style>
   </defs>
 
-  <!-- Left Icon Emblem (Scale & Center at 140, 140) -->
-  <g transform="translate(0, 0)">
-    <!-- Orbit 1 (Slow Path Violet) -->
-    <g class="anim-orbit-1">
-      <ellipse cx="140" cy="140" rx="90" ry="36" fill="none" stroke="url(#logoSlowGrad)" stroke-width="2" stroke-dasharray="10 8" opacity="0.75" filter="url(#logoGlow)"/>
-      <circle cx="230" cy="140" r="3" fill="#d946ef" filter="url(#logoGlow)"/>
+  <!-- Rounded Hero Container -->
+  <rect width="1080" height="300" rx="24" fill="url(#bannerBg)"/>
+  <rect width="1078" height="298" x="1" y="1" rx="23" fill="none" stroke="#1e293b" stroke-width="2"/>
+
+  <!-- Subtle Background Grid & Aura -->
+  <circle cx="155" cy="150" r="125" fill="#00f2fe" opacity="0.06" filter="url(#logoGlow)"/>
+  <circle cx="195" cy="150" r="110" fill="#d946ef" opacity="0.06" filter="url(#logoGlow)"/>
+
+  <!-- LEFT EMBLEM: HERMES WINGS + CADUCEUS HELIX + OPENCLAW TITANIUM TALON (Centered at 155, 154) -->
+  <g>
+    <!-- Zero-Trust Hexagonal Sandbox Shield -->
+    <polygon points="155,26 266,90 266,218 155,282 44,218 44,90"
+             fill="none" stroke="#1e293b" stroke-width="2" stroke-dasharray="8 5"/>
+
+    <!-- Hermes Cybernetic Talaria Wings -->
+    <g class="anim-wing-emblem" filter="url(#logoGlow)">
+      <!-- Left Cyan Wing (OpenClaw Fast Reflex) -->
+      <path d="M 116,136 L 22,74 L 46,110 L 108,148 Z" fill="url(#wingLeftGrad)"/>
+      <path d="M 110,152 L 14,116 L 38,146 L 106,164 Z" fill="url(#wingLeftGrad)" opacity="0.9"/>
+      <path d="M 112,168 L 28,160 L 54,182 L 110,180 Z" fill="url(#wingLeftGrad)" opacity="0.75"/>
+
+      <!-- Right Gold-Violet Wing (Hermes Self-Evolution) -->
+      <path d="M 194,136 L 288,74 L 264,110 L 202,148 Z" fill="url(#wingRightGrad)"/>
+      <path d="M 200,152 L 296,116 L 272,146 L 204,164 Z" fill="url(#wingRightGrad)" opacity="0.9"/>
+      <path d="M 198,168 L 282,160 L 256,182 L 200,180 Z" fill="url(#wingRightGrad)" opacity="0.75"/>
     </g>
 
-    <!-- Orbit 2 (Fast Path Cyan) -->
-    <g class="anim-orbit-2">
-      <ellipse cx="140" cy="140" rx="84" ry="30" fill="none" stroke="url(#logoFastGrad)" stroke-width="2" stroke-dasharray="12 6" opacity="0.85" filter="url(#logoGlow)"/>
-      <circle cx="140" cy="110" r="3.5" fill="#00f2fe" filter="url(#logoGlow)"/>
-    </g>
+    <!-- Orbital Caduceus Rings -->
+    <ellipse cx="155" cy="154" rx="94" ry="35" fill="none" stroke="url(#logoSlowGrad)" stroke-width="2" stroke-dasharray="12 7" transform="rotate(-26 155 154)" filter="url(#logoGlow)"/>
+    <ellipse cx="155" cy="154" rx="94" ry="35" fill="none" stroke="url(#logoFastGrad)" stroke-width="2" stroke-dasharray="12 7" transform="rotate(26 155 154)" filter="url(#logoGlow)"/>
 
-    <!-- Energy Core -->
+    <!-- Caduceus Lower Helix Tail -->
+    <path d="M 155,204 C 134,220 176,238 155,256 C 142,266 155,276 155,280" fill="none" stroke="url(#logoFastGrad)" stroke-width="2.5" filter="url(#logoGlow)"/>
+    <path d="M 155,204 C 176,220 134,238 155,256 C 168,266 155,276 155,280" fill="none" stroke="url(#logoSlowGrad)" stroke-width="2.5" filter="url(#logoGlow)"/>
+
+    <!-- Dual-Brain Quantum Core -->
     <g class="anim-core-sphere">
-      <path d="M 140,94 A 46,46 0 0,0 140,186 Z" fill="url(#logoFastGrad)" opacity="0.85" filter="url(#logoGlow)"/>
-      <path d="M 140,94 A 46,46 0 0,1 140,186 Z" fill="url(#logoSlowGrad)" opacity="0.85" filter="url(#logoGlow)"/>
-      <circle cx="140" cy="140" r="20" fill="#ffffff" opacity="0.95" filter="url(#logoGlow)"/>
-      <circle cx="140" cy="140" r="10" fill="#e0f2fe"/>
+      <path d="M 155,104 A 50,50 0 0,0 155,204 Z" fill="url(#logoFastGrad)" opacity="0.92" filter="url(#logoGlow)"/>
+      <path d="M 155,104 A 50,50 0 0,1 155,204 Z" fill="url(#logoSlowGrad)" opacity="0.92" filter="url(#logoGlow)"/>
+      <circle cx="155" cy="154" r="19" fill="#ffffff" filter="url(#logoGlow)"/>
+      <polygon points="155,140 167,147 167,161 155,168 143,161 143,147" fill="#070a12" stroke="#00f2fe" stroke-width="1.5"/>
+      <circle cx="155" cy="154" r="5.5" fill="#00f2fe"/>
+      <line x1="155" y1="102" x2="155" y2="206" stroke="#ffffff" stroke-width="2" opacity="0.85"/>
     </g>
 
-    <!-- Claws Gripping -->
-    <!-- Top Mandible -->
-    <path d="M 124,28 L 140,49 L 156,28 L 151,58 L 140,91 L 129,58 Z" fill="url(#metalDark)" stroke="#475569" stroke-width="1.2"/>
-    <path d="M 140,49 L 156,28 L 151,58 L 140,91 Z" fill="url(#metalFacet)"/>
-    <polygon points="140,91 141,100 139,100" fill="#00f2fe" filter="url(#logoGlow)"/>
+    <!-- OpenClaw Titanium Talons Gripping Core -->
+    <!-- Apex Diamond -->
+    <polygon points="155,26 167,42 155,58 143,42" fill="url(#logoSlowGrad)" filter="url(#logoGlow)"/>
+    <!-- Center Upper Mandible -->
+    <path d="M 137,46 L 155,68 L 173,46 L 167,84 L 155,120 L 143,84 Z" fill="url(#metalDark)" stroke="#64748b" stroke-width="1.4"/>
+    <path d="M 155,68 L 173,46 L 167,84 L 155,120 Z" fill="url(#metalFacet)"/>
+    <polygon points="155,120 158,132 155,137 152,132" fill="#00f2fe" filter="url(#logoGlow)"/>
 
-    <!-- Left Claw -->
-    <g transform="rotate(-38 140 140)">
-      <path d="M 127,40 L 140,61 L 153,43 L 147,73 L 140,101 L 133,73 Z" fill="url(#metalDark)" stroke="#38bdf8" stroke-width="1.2"/>
-      <path d="M 140,61 L 153,43 L 147,73 L 140,101 Z" fill="url(#metalFacet)"/>
-      <path d="M 140,101 Q 135,118 124,124 Q 133,113 140,101 Z" fill="#00f2fe" filter="url(#logoGlow)"/>
+    <!-- Left Claw (OpenClaw Fast Grip) -->
+    <g transform="rotate(-44 155 154)">
+      <path d="M 140,52 L 155,75 L 170,55 L 164,90 L 155,122 L 146,90 Z" fill="url(#metalDark)" stroke="#00f2fe" stroke-width="1.5"/>
+      <path d="M 155,75 L 170,55 L 164,90 L 155,122 Z" fill="url(#metalFacet)"/>
+      <path d="M 155,122 Q 149,140 137,147 Q 147,134 155,122 Z" fill="#00f2fe" filter="url(#logoGlow)"/>
     </g>
 
-    <!-- Right Claw -->
-    <g transform="rotate(38 140 140)">
-      <path d="M 127,40 L 140,61 L 153,43 L 147,73 L 140,101 L 133,73 Z" fill="url(#metalDark)" stroke="#c084fc" stroke-width="1.2"/>
-      <path d="M 140,61 L 153,43 L 147,73 L 140,101 Z" fill="url(#metalFacet)"/>
-      <path d="M 140,101 Q 145,118 156,124 Q 147,113 140,101 Z" fill="#d946ef" filter="url(#logoGlow)"/>
+    <!-- Right Claw (Hermes Slow Grip) -->
+    <g transform="rotate(44 155 154)">
+      <path d="M 140,52 L 155,75 L 170,55 L 164,90 L 155,122 L 146,90 Z" fill="url(#metalDark)" stroke="#f59e0b" stroke-width="1.5"/>
+      <path d="M 155,75 L 170,55 L 164,90 L 155,122 Z" fill="url(#metalFacet)"/>
+      <path d="M 155,122 Q 161,140 173,147 Q 163,134 155,122 Z" fill="#f59e0b" filter="url(#logoGlow)"/>
     </g>
   </g>
 
-  <!-- Brand Typography -->
-  <g transform="translate(280, 0)">
+  <!-- RIGHT TYPOGRAPHY & ARCHITECTURAL IDENTITY -->
+  <g transform="translate(320, 0)">
+    <!-- Fusion Identity Tag -->
+    <rect x="4" y="38" width="445" height="24" rx="12" fill="#111827" stroke="#1e293b"/>
+    <circle cx="18" cy="50" r="4" fill="#10b981"/>
+    <text x="30" y="54" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="11" font-weight="700" letter-spacing="0.12em" fill="#cbd5e1">
+      HERMES SELF-EVOLUTION × OPENCLAW TOKEN FRUGALITY
+    </text>
+
     <!-- Primary Wordmark -->
-    <text x="0" y="145" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-weight="900" font-size="76" letter-spacing="-0.04em" fill="url(#textGrad)">
+    <text x="0" y="136" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-weight="900" font-size="78" letter-spacing="-0.04em" fill="url(#textGrad)">
       OPEN<tspan fill="#00f2fe">TALON</tspan>
     </text>
 
-    <!-- Subtitle / Architecture Badging -->
-    <text x="4" y="185" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-weight="600" font-size="16" letter-spacing="0.25em" fill="#64748b">
-      DUAL-BRAIN AUTONOMOUS AGENT
+    <!-- Version Pill -->
+    <rect x="505" y="88" width="76" height="28" rx="8" fill="url(#logoSlowGrad)"/>
+    <text x="519" y="107" font-family="ui-monospace, monospace" font-weight="800" font-size="14" fill="#ffffff">v0.5.0</text>
+
+    <!-- Subtitle -->
+    <text x="4" y="172" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-weight="600" font-size="14.5" letter-spacing="0.2em" fill="#94a3b8">
+      SOVEREIGN DUAL-BRAIN AI AGENT &amp; GEMINI BOOSTER ENGINE
     </text>
 
-    <!-- Decorative Accent Line -->
-    <line x1="4" y1="205" x2="380" y2="205" stroke="url(#logoFastGrad)" stroke-width="2.5" opacity="0.8"/>
-    <circle cx="380" cy="205" r="3" fill="#d946ef" filter="url(#logoGlow)"/>
+    <!-- Gradient Divider Line -->
+    <line x1="4" y1="192" x2="690" y2="192" stroke="url(#logoFastGrad)" stroke-width="2" opacity="0.85"/>
+    <circle cx="690" cy="192" r="3.5" fill="#f59e0b" filter="url(#logoGlow)"/>
 
-    <!-- Micro Tech Pills -->
-    <rect x="4" y="222" width="105" height="24" rx="6" fill="#111827" stroke="#1f293d"/>
-    <text x="14" y="238" font-family="ui-monospace, monospace" font-size="11" fill="#00f2fe" font-weight="700">⚡ FAST &lt;1.5K</text>
+    <!-- 5 Identity Pillars Badges -->
+    <g transform="translate(4, 212)">
+      <rect x="0" y="0" width="142" height="28" rx="6" fill="#0f172a" stroke="#0ea5e9" stroke-width="1"/>
+      <text x="12" y="18" font-family="ui-monospace, monospace" font-size="11" fill="#00f2fe" font-weight="700">🦅 OPENCLAW &lt;1.5K</text>
 
-    <rect x="119" y="222" width="118" height="24" rx="6" fill="#111827" stroke="#1f293d"/>
-    <text x="129" y="238" font-family="ui-monospace, monospace" font-size="11" fill="#d946ef" font-weight="700">🧠 SLOW CLOSED</text>
+      <rect x="152" y="0" width="156" height="28" rx="6" fill="#0f172a" stroke="#d946ef" stroke-width="1"/>
+      <text x="164" y="18" font-family="ui-monospace, monospace" font-size="11" fill="#f59e0b" font-weight="700">🪽 HERMES 3X EVOLVE</text>
 
-    <rect x="247" y="222" width="108" height="24" rx="6" fill="#111827" stroke="#1f293d"/>
-    <text x="257" y="238" font-family="ui-monospace, monospace" font-size="11" fill="#10b981" font-weight="700">🛡️ ZERO-TRUST</text>
+      <rect x="318" y="0" width="148" height="28" rx="6" fill="#0f172a" stroke="#8b5cf6" stroke-width="1"/>
+      <text x="330" y="18" font-family="ui-monospace, monospace" font-size="11" fill="#c084fc" font-weight="700">⚡ 90% KV-CACHE</text>
+
+      <rect x="476" y="0" width="142" height="28" rx="6" fill="#0f172a" stroke="#10b981" stroke-width="1"/>
+      <text x="488" y="18" font-family="ui-monospace, monospace" font-size="11" fill="#10b981" font-weight="700">🛡️ ZERO-TRUST VM</text>
+
+      <rect x="628" y="0" width="96" height="28" rx="6" fill="#0f172a" stroke="#f59e0b" stroke-width="1"/>
+      <text x="640" y="18" font-family="ui-monospace, monospace" font-size="11" fill="#fbbf24" font-weight="700">💰 FINOPS</text>
+    </g>
   </g>
 </svg>
