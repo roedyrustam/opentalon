@@ -12,6 +12,9 @@ import {
   type SkillRevision,
   type ScheduledJob,
   type JobExecutionLog,
+  type AgentIdentity,
+  type FederatedPeer,
+  type A2AAuditLog,
 } from './types.js';
 import { cosineSimilarity, reciprocalRankFusion, type RankedItem } from './rrf.js';
 
@@ -195,6 +198,59 @@ export class LibSqlMemoryAdapter implements IMemoryPort {
     `);
     await this.client.execute(`
       CREATE INDEX IF NOT EXISTS idx_logs_time ON job_execution_logs(started_at DESC);
+    `);
+
+    // Agent Identity Table (Singleton Local Keypair)
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS agent_identity (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        public_key TEXT NOT NULL,
+        private_key TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+
+    // Federated Peers Mesh Table
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS federated_peers (
+        peer_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        endpoint_url TEXT NOT NULL UNIQUE,
+        public_key TEXT NOT NULL,
+        capabilities TEXT NOT NULL,
+        status TEXT NOT NULL,
+        latency_ms REAL,
+        last_seen_at INTEGER NOT NULL
+      );
+    `);
+
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_peers_status ON federated_peers(status);
+    `);
+
+    // A2A Audit Logs Table
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS a2a_audit_logs (
+        id TEXT PRIMARY KEY,
+        trace_id TEXT NOT NULL,
+        peer_id TEXT NOT NULL,
+        direction TEXT NOT NULL,
+        action TEXT NOT NULL,
+        status TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        result TEXT,
+        duration_ms REAL,
+        timestamp INTEGER NOT NULL
+      );
+    `);
+
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_a2a_peer_time ON a2a_audit_logs(peer_id, timestamp DESC);
+    `);
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_a2a_trace ON a2a_audit_logs(trace_id);
     `);
 
     this.isInitialized = true;
@@ -1024,6 +1080,189 @@ export class LibSqlMemoryAdapter implements IMemoryPort {
       importedSkills,
       importedFacts,
       importedTraces,
+    };
+  }
+
+  // --- A2A Protocol & Mesh Federation Methods ---
+
+  public async getAgentIdentity(): Promise<AgentIdentity | null> {
+    const res = await this.client.execute('SELECT * FROM agent_identity LIMIT 1;');
+    if (res.rows.length === 0) return null;
+    const row = res.rows[0];
+    return {
+      id: String(row.id),
+      name: String(row.name),
+      publicKey: String(row.public_key),
+      privateKey: String(row.private_key),
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
+    };
+  }
+
+  public async saveAgentIdentity(identity: AgentIdentity): Promise<void> {
+    await this.client.execute({
+      sql: `
+        INSERT OR REPLACE INTO agent_identity (id, name, public_key, private_key, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?);
+      `,
+      args: [
+        identity.id,
+        identity.name,
+        identity.publicKey,
+        identity.privateKey,
+        identity.createdAt,
+        identity.updatedAt,
+      ],
+    });
+  }
+
+  public async saveFederatedPeer(peer: FederatedPeer): Promise<void> {
+    await this.client.execute({
+      sql: `
+        INSERT INTO federated_peers (peer_id, name, endpoint_url, public_key, capabilities, status, latency_ms, last_seen_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(peer_id) DO UPDATE SET
+          name = excluded.name,
+          endpoint_url = excluded.endpoint_url,
+          public_key = excluded.public_key,
+          capabilities = excluded.capabilities,
+          status = excluded.status,
+          latency_ms = excluded.latency_ms,
+          last_seen_at = excluded.last_seen_at;
+      `,
+      args: [
+        peer.peerId,
+        peer.name,
+        peer.endpointUrl,
+        peer.publicKey,
+        JSON.stringify(peer.capabilities),
+        peer.status,
+        peer.latencyMs !== undefined ? peer.latencyMs : null,
+        peer.lastSeenAt,
+      ],
+    });
+  }
+
+  public async getFederatedPeer(peerIdOrEndpoint: string): Promise<FederatedPeer | null> {
+    const res = await this.client.execute({
+      sql: 'SELECT * FROM federated_peers WHERE peer_id = ? OR endpoint_url = ? LIMIT 1;',
+      args: [peerIdOrEndpoint, peerIdOrEndpoint],
+    });
+    if (res.rows.length === 0) return null;
+    return this.mapPeerRow(res.rows[0] as unknown as Record<string, unknown>);
+  }
+
+  public async listFederatedPeers(options?: { status?: 'online' | 'offline' | 'unreachable' }): Promise<FederatedPeer[]> {
+    let sql = 'SELECT * FROM federated_peers';
+    const args: Array<string | number> = [];
+    if (options?.status) {
+      sql += ' WHERE status = ?';
+      args.push(options.status);
+    }
+    sql += ' ORDER BY last_seen_at DESC;';
+    const res = await this.client.execute({ sql, args });
+    return res.rows.map((row) => this.mapPeerRow(row as unknown as Record<string, unknown>));
+  }
+
+  public async updatePeerStatus(peerId: string, status: 'online' | 'offline' | 'unreachable', latencyMs?: number): Promise<void> {
+    await this.client.execute({
+      sql: `
+        UPDATE federated_peers
+        SET status = ?, latency_ms = COALESCE(?, latency_ms), last_seen_at = ?
+        WHERE peer_id = ?;
+      `,
+      args: [status, latencyMs !== undefined ? latencyMs : null, Date.now(), peerId],
+    });
+  }
+
+  public async deleteFederatedPeer(peerId: string): Promise<boolean> {
+    const res = await this.client.execute({
+      sql: 'DELETE FROM federated_peers WHERE peer_id = ? OR endpoint_url = ?;',
+      args: [peerId, peerId],
+    });
+    return res.rowsAffected > 0;
+  }
+
+  public async saveA2AAuditLog(log: A2AAuditLog): Promise<void> {
+    await this.client.execute({
+      sql: `
+        INSERT INTO a2a_audit_logs (id, trace_id, peer_id, direction, action, status, payload, result, duration_ms, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+      `,
+      args: [
+        log.id,
+        log.traceId,
+        log.peerId,
+        log.direction,
+        log.action,
+        log.status,
+        JSON.stringify(log.payload),
+        log.result ? (typeof log.result === 'string' ? log.result : JSON.stringify(log.result)) : null,
+        log.durationMs !== undefined ? log.durationMs : null,
+        log.timestamp,
+      ],
+    });
+  }
+
+  public async getA2AAuditLogs(options?: { peerId?: string; limit?: number }): Promise<A2AAuditLog[]> {
+    let sql = 'SELECT * FROM a2a_audit_logs';
+    const args: Array<string | number> = [];
+    if (options?.peerId) {
+      sql += ' WHERE peer_id = ?';
+      args.push(options.peerId);
+    }
+    sql += ' ORDER BY timestamp DESC LIMIT ?;';
+    args.push(options?.limit ?? 50);
+
+    const res = await this.client.execute({ sql, args });
+    return res.rows.map((row) => {
+      let payload: Record<string, unknown> = {};
+      try {
+        payload = JSON.parse(String(row.payload));
+      } catch {
+        payload = { raw: String(row.payload) };
+      }
+
+      let result: Record<string, unknown> | string | undefined = undefined;
+      if (row.result) {
+        try {
+          result = JSON.parse(String(row.result));
+        } catch {
+          result = String(row.result);
+        }
+      }
+
+      return {
+        id: String(row.id),
+        traceId: String(row.trace_id),
+        peerId: String(row.peer_id),
+        direction: String(row.direction) as 'inbound' | 'outbound',
+        action: String(row.action) as 'negotiate' | 'dispatch',
+        status: String(row.status) as 'accepted' | 'rejected' | 'completed' | 'failed',
+        payload,
+        result,
+        durationMs: row.duration_ms !== null ? Number(row.duration_ms) : undefined,
+        timestamp: Number(row.timestamp),
+      };
+    });
+  }
+
+  private mapPeerRow(row: Record<string, unknown>): FederatedPeer {
+    let capabilities: string[] = [];
+    try {
+      capabilities = JSON.parse(String(row.capabilities));
+    } catch {
+      capabilities = [];
+    }
+    return {
+      peerId: String(row.peer_id),
+      name: String(row.name),
+      endpointUrl: String(row.endpoint_url),
+      publicKey: String(row.public_key),
+      capabilities,
+      status: String(row.status) as 'online' | 'offline' | 'unreachable',
+      latencyMs: row.latency_ms !== null ? Number(row.latency_ms) : undefined,
+      lastSeenAt: Number(row.last_seen_at),
     };
   }
 }

@@ -20,3 +20,5 @@ export * from './mcp/mcp-bridge.js';
 export * from './swarm/types.js';
 export * from './swarm/swarm-director.js';
 export * from './scheduler/index.js';
+export * from './a2a/types.js';
+export * from './a2a/identity-manager.js';

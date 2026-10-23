@@ -6,6 +6,7 @@ export interface SubagentDefinition {
   thinkingBudget?: number;
   tokenBudget?: number;
   workerLLM?: import('../types.js').ILLMPort;
+  targetPeerUrl?: string;
 }
 
 export type SwarmTopology = 'fan_out_fan_in' | 'pipeline_saga' | 'critic_validator_loop';

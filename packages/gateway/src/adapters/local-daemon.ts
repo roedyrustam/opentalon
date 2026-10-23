@@ -9,7 +9,15 @@ import {
   McpToolBridge,
   SwarmDirector,
   CronScheduler,
+  AgentIdentityManager,
+  type AgentCard,
+  type SignedHeaders,
+  type A2ANegotiateRequest,
+  type A2ANegotiateResponse,
+  type A2ADispatchRequest,
+  type A2ADispatchResponse,
 } from '@opentalon/core';
+import { type FederatedPeer } from '@opentalon/memory';
 import { type GatewayRequestPayload, type GatewayResponsePayload } from '../types.js';
 import { getDashboardHtml } from '../dashboard/html.js';
 import { SseStreamAdapter } from './sse-stream.js';
@@ -33,6 +41,7 @@ export class LocalDaemonAdapter {
   private swarmDirector: SwarmDirector;
   private scheduler: CronScheduler;
   private webhookSecret?: string;
+  private identityManager: AgentIdentityManager;
 
   constructor(router: DualBrainRouter, options: LocalDaemonOptions = {}) {
     this.router = router;
@@ -42,6 +51,7 @@ export class LocalDaemonAdapter {
     this.mcpServer = new McpServer(router.getMemory(), router.getSandbox());
     this.swarmDirector = new SwarmDirector(router.getLLM());
     this.webhookSecret = options.webhookSecret ?? process.env.TALON_WEBHOOK_SECRET;
+    this.identityManager = new AgentIdentityManager(router.getMemory());
 
     this.scheduler =
       options.scheduler ||
@@ -59,6 +69,10 @@ export class LocalDaemonAdapter {
     return this.scheduler;
   }
 
+  public getIdentityManager(): AgentIdentityManager {
+    return this.identityManager;
+  }
+
   public start(): Promise<number> {
     return new Promise((resolve, reject) => {
       this.server = http.createServer(async (req, res) => {
@@ -66,8 +80,11 @@ export class LocalDaemonAdapter {
 
         // Enable CORS
         res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS, DELETE');
+        res.setHeader(
+          'Access-Control-Allow-Headers',
+          'Content-Type, Authorization, X-Talon-Signature, X-Talon-Agent-Id, X-Talon-Public-Key, X-Talon-Timestamp, X-Talon-Nonce'
+        );
 
         if (req.method === 'OPTIONS') {
           res.writeHead(204);
@@ -979,6 +996,360 @@ export class LocalDaemonAdapter {
               res.end(JSON.stringify({ error: String(err) }));
             }
           });
+          return;
+        }
+
+        // 23. A2A Agent Card Standard Endpoint
+        if (
+          req.method === 'GET' &&
+          (url.pathname === '/.well-known/agent.json' || url.pathname === '/api/a2a/card')
+        ) {
+          try {
+            const identity = await this.identityManager.getOrCreateIdentity();
+            const skills = await this.router.getMemory().listSkills();
+            const baseUrl = `http://${this.host}:${this.port}`;
+            const card: AgentCard = {
+              urn: identity.id,
+              name: identity.name,
+              version: '0.6.0',
+              publicKey: identity.publicKey,
+              endpoints: {
+                base: baseUrl,
+                agentCard: `${baseUrl}/.well-known/agent.json`,
+                negotiate: `${baseUrl}/api/a2a/negotiate`,
+                dispatch: `${baseUrl}/api/a2a/dispatch`,
+              },
+              skills: skills.map((s) => ({
+                name: s.name,
+                description: s.description,
+                version: s.version,
+                capabilities: (s.capabilities as Record<string, unknown>) || {},
+              })),
+              activeModel: this.router.getLLM().constructor.name,
+              status: 'online',
+              uptimeSeconds: Math.round(process.uptime()),
+            };
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(card, null, 2));
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+          return;
+        }
+
+        // 24. A2A Peers Mesh Registry: List Peers
+        if (req.method === 'GET' && url.pathname === '/api/a2a/peers') {
+          try {
+            const status = (url.searchParams.get('status') as
+              | 'online'
+              | 'offline'
+              | 'unreachable') || undefined;
+            const peers = await this.router.getMemory().listFederatedPeers({ status });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(peers));
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+          return;
+        }
+
+        // 25. A2A Peers Mesh Registry: Register Peer
+        if (req.method === 'POST' && url.pathname === '/api/a2a/peers/register') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const payload = JSON.parse(body) as {
+                endpointUrl?: string;
+                peerId?: string;
+                name?: string;
+                publicKey?: string;
+                capabilities?: string[];
+              };
+
+              if (!payload.endpointUrl) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Missing endpointUrl in request payload' }));
+                return;
+              }
+
+              let peerToSave: FederatedPeer;
+
+              // If full details provided directly
+              if (payload.peerId && payload.publicKey) {
+                peerToSave = {
+                  peerId: payload.peerId,
+                  name: payload.name || 'Remote OpenTalon Peer',
+                  endpointUrl: payload.endpointUrl,
+                  publicKey: payload.publicKey,
+                  capabilities: payload.capabilities || [],
+                  status: 'online',
+                  lastSeenAt: Date.now(),
+                };
+              } else {
+                // Discover automatically via /.well-known/agent.json
+                const cardUrl = payload.endpointUrl.replace(/\/$/, '') + '/.well-known/agent.json';
+                const startTime = Date.now();
+                const cardRes = await fetch(cardUrl, { signal: AbortSignal.timeout(5000) });
+                if (!cardRes.ok) {
+                  throw new Error(`Failed to fetch Agent Card from ${cardUrl}: HTTP ${cardRes.status}`);
+                }
+                const card = (await cardRes.json()) as AgentCard;
+                const latencyMs = Date.now() - startTime;
+
+                peerToSave = {
+                  peerId: card.urn,
+                  name: card.name,
+                  endpointUrl: payload.endpointUrl,
+                  publicKey: card.publicKey,
+                  capabilities: card.skills.map((s) => s.name),
+                  status: 'online',
+                  latencyMs,
+                  lastSeenAt: Date.now(),
+                };
+              }
+
+              await this.router.getMemory().saveFederatedPeer(peerToSave);
+              res.writeHead(201, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify(peerToSave));
+            } catch (err: unknown) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: String(err) }));
+            }
+          });
+          return;
+        }
+
+        // 26. A2A Peers Mesh Registry: Delete Peer
+        const peerDeleteMatch = url.pathname.match(/^\/api\/a2a\/peers\/([^/]+)$/);
+        if (req.method === 'DELETE' && peerDeleteMatch) {
+          const peerId = decodeURIComponent(peerDeleteMatch[1]);
+          try {
+            const deleted = await this.router.getMemory().deleteFederatedPeer(peerId);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: deleted }));
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+          return;
+        }
+
+        // 27. A2A Ping Endpoint
+        if (req.method === 'POST' && url.pathname === '/api/a2a/ping') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const payload = JSON.parse(body || '{}') as {
+                peerId?: string;
+                endpointUrl?: string;
+              };
+              const peer = await this.router
+                .getMemory()
+                .getFederatedPeer(payload.peerId || payload.endpointUrl || '');
+              if (!peer) {
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Peer not found in registry' }));
+                return;
+              }
+
+              const targetUrl = peer.endpointUrl.replace(/\/$/, '') + '/healthz';
+              const startTime = Date.now();
+              try {
+                const pingRes = await fetch(targetUrl, { signal: AbortSignal.timeout(4000) });
+                const latency = Date.now() - startTime;
+                const status = pingRes.ok ? 'online' : 'unreachable';
+                await this.router.getMemory().updatePeerStatus(peer.peerId, status, latency);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ peerId: peer.peerId, status, latencyMs: latency }));
+              } catch {
+                await this.router.getMemory().updatePeerStatus(peer.peerId, 'offline');
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ peerId: peer.peerId, status: 'offline' }));
+              }
+            } catch (err: unknown) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: String(err) }));
+            }
+          });
+          return;
+        }
+
+        // 28. A2A Task Negotiation (0-Token Gate)
+        if (req.method === 'POST' && url.pathname === '/api/a2a/negotiate') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            const startTime = Date.now();
+            try {
+              const payload = JSON.parse(body) as A2ANegotiateRequest;
+
+              // Check signature if signature headers are provided
+              const signature = req.headers['x-talon-signature'];
+              if (signature) {
+                const signedHeaders: SignedHeaders = {
+                  agentId: String(req.headers['x-talon-agent-id'] || ''),
+                  publicKey: String(req.headers['x-talon-public-key'] || ''),
+                  signature: String(signature),
+                  timestamp: Number(req.headers['x-talon-timestamp'] || 0),
+                  nonce: String(req.headers['x-talon-nonce'] || ''),
+                };
+                const v = this.identityManager.verifyRequestSignature(payload, signedHeaders);
+                if (!v.valid) {
+                  res.writeHead(401, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ error: v.error }));
+                  return;
+                }
+              }
+
+              // Check skills capability match in memory
+              const identity = await this.identityManager.getOrCreateIdentity();
+              const availableSkillsList = await this.router.getMemory().listSkills();
+              const availableNames = new Set(availableSkillsList.map((s) => s.name));
+
+              const required = payload.requiredSkills || [];
+              const matchedSkills = required.filter((name) => availableNames.has(name));
+              const canHandle = required.length === 0 || matchedSkills.length === required.length;
+
+              const response: A2ANegotiateResponse = {
+                canHandle,
+                reason: canHandle
+                  ? undefined
+                  : `Missing required skill(s): ${required.filter((n) => !availableNames.has(n)).join(', ')}`,
+                availableSkills: Array.from(availableNames),
+                assignedPeerId: identity.id,
+                estimatedLatencyMs: 150,
+              };
+
+              // Audit log
+              await this.router.getMemory().saveA2AAuditLog({
+                id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                traceId: payload.taskId || `trace_${Date.now()}`,
+                peerId: payload.senderAgentId || 'anonymous',
+                direction: 'inbound',
+                action: 'negotiate',
+                status: canHandle ? 'accepted' : 'rejected',
+                payload: payload as unknown as Record<string, unknown>,
+                result: response as unknown as Record<string, unknown>,
+                durationMs: Date.now() - startTime,
+                timestamp: Date.now(),
+              });
+
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify(response));
+            } catch (err: unknown) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: String(err) }));
+            }
+          });
+          return;
+        }
+
+        // 29. A2A Task Dispatch & Execution
+        if (req.method === 'POST' && url.pathname === '/api/a2a/dispatch') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            const startTime = Date.now();
+            try {
+              const payload = JSON.parse(body) as A2ADispatchRequest;
+
+              // Check circular delegation depth limit
+              if (payload.delegationDepth && payload.delegationDepth > 3) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(
+                  JSON.stringify({
+                    error: `ERR_MAX_DELEGATION_DEPTH: Delegation depth ${payload.delegationDepth} exceeded limit of 3`,
+                  })
+                );
+                return;
+              }
+
+              // Check signature if signature headers are provided
+              const signature = req.headers['x-talon-signature'];
+              if (signature) {
+                const signedHeaders: SignedHeaders = {
+                  agentId: String(req.headers['x-talon-agent-id'] || ''),
+                  publicKey: String(req.headers['x-talon-public-key'] || ''),
+                  signature: String(signature),
+                  timestamp: Number(req.headers['x-talon-timestamp'] || 0),
+                  nonce: String(req.headers['x-talon-nonce'] || ''),
+                };
+                const v = this.identityManager.verifyRequestSignature(payload, signedHeaders);
+                if (!v.valid) {
+                  res.writeHead(401, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ error: v.error }));
+                  return;
+                }
+              }
+
+              const identity = await this.identityManager.getOrCreateIdentity();
+
+              // Execute through Fast Path
+              const result = await this.router.executeFastPath({
+                sessionId: `a2a_${payload.taskId || Date.now()}`,
+                input: payload.task,
+                skillsFilter: payload.skillsFilter,
+              });
+
+              const response: A2ADispatchResponse = {
+                taskId: payload.taskId,
+                senderAgentId: payload.senderAgentId || 'anonymous',
+                executorPeerId: identity.id,
+                success: true,
+                output: result.output,
+                tokensUsed: result.tokensUsed,
+                durationMs: Date.now() - startTime,
+              };
+
+              // Audit log
+              await this.router.getMemory().saveA2AAuditLog({
+                id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                traceId: payload.taskId || `trace_${Date.now()}`,
+                peerId: payload.senderAgentId || 'anonymous',
+                direction: 'inbound',
+                action: 'dispatch',
+                status: 'completed',
+                payload: payload as unknown as Record<string, unknown>,
+                result: response as unknown as Record<string, unknown>,
+                durationMs: Date.now() - startTime,
+                timestamp: Date.now(),
+              });
+
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify(response));
+            } catch (err: unknown) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: String(err) }));
+            }
+          });
+          return;
+        }
+
+        // 30. A2A Audit Logs API
+        if (req.method === 'GET' && url.pathname === '/api/a2a/logs') {
+          try {
+            const peerId = url.searchParams.get('peerId') || undefined;
+            const limit = parseInt(url.searchParams.get('limit') || '50', 10);
+            const logs = await this.router.getMemory().getA2AAuditLogs({ peerId, limit });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(logs));
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
           return;
         }
 

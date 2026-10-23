@@ -111,6 +111,57 @@ CREATE VIRTUAL TABLE IF NOT EXISTS fts_skills USING fts5(
 );
 ```
 
+### 3.4 `agent_identity` (Local Singleton Ed25519 Keypair)
+Stores the local agent's asymmetric cryptographic keypair for signing A2A federation requests.
+
+```sql
+CREATE TABLE IF NOT EXISTS agent_identity (
+    id TEXT PRIMARY KEY,               -- e.g. 'urn:talon:agent:<uuid>'
+    name TEXT NOT NULL,
+    public_key TEXT NOT NULL,          -- SPKI PEM / Ed25519 Base64
+    private_key TEXT NOT NULL,         -- PKCS8 PEM / Ed25519 Base64
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+```
+
+### 3.5 `federated_peers` (P2P Mesh Registry)
+Stores discovered remote OpenTalon nodes, public keys, latency, and skill capability manifests.
+
+```sql
+CREATE TABLE IF NOT EXISTS federated_peers (
+    peer_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    endpoint_url TEXT NOT NULL UNIQUE, -- e.g. 'http://127.0.0.1:3200'
+    public_key TEXT NOT NULL,
+    capabilities TEXT NOT NULL,        -- JSON array of skill names/capabilities
+    status TEXT NOT NULL,              -- 'online' | 'offline' | 'unreachable'
+    latency_ms REAL,
+    last_seen_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_peers_status ON federated_peers(status);
+```
+
+### 3.6 `a2a_audit_logs` (A2A Negotiation & Dispatch Transaction Logs)
+Maintains an immutable audit trail of all inbound and outbound A2A task proposals and dispatches.
+
+```sql
+CREATE TABLE IF NOT EXISTS a2a_audit_logs (
+    id TEXT PRIMARY KEY,
+    trace_id TEXT NOT NULL,
+    peer_id TEXT NOT NULL,
+    direction TEXT NOT NULL,           -- 'inbound' | 'outbound'
+    action TEXT NOT NULL,              -- 'negotiate' | 'dispatch'
+    status TEXT NOT NULL,              -- 'accepted' | 'rejected' | 'completed' | 'failed'
+    payload TEXT NOT NULL,             -- JSON stringified payload
+    result TEXT,                       -- JSON stringified result
+    duration_ms REAL,
+    timestamp INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_a2a_peer_time ON a2a_audit_logs(peer_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_a2a_trace ON a2a_audit_logs(trace_id);
+```
+
 ---
 
 ## 4. Query & Synchronization Patterns
@@ -136,3 +187,4 @@ When a skill fails validation during Slow Path reflection or test execution:
 2. The `procedural_skills` row remains at the previous valid semantic version.
 3. The `fts_skills` index retains the previous valid descriptor.
 4. An error trace is logged into `episodic_traces` with `success = 0`.
+

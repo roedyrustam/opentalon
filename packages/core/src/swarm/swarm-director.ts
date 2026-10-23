@@ -6,14 +6,22 @@ import {
   type SubagentDefinition,
   type SubagentExecutionResult,
 } from './types.js';
+import { AgentIdentityManager } from '../a2a/identity-manager.js';
+import { type A2ADispatchRequest, type A2ADispatchResponse } from '../a2a/types.js';
 
 export class SwarmDirector {
   private llm: ILLMPort;
   private defaultWorkerLLM?: ILLMPort;
+  private identityManager?: AgentIdentityManager;
 
-  constructor(llm: ILLMPort, defaultWorkerLLM?: ILLMPort) {
+  constructor(
+    llm: ILLMPort,
+    defaultWorkerLLM?: ILLMPort,
+    identityManager?: AgentIdentityManager
+  ) {
     this.llm = llm;
     this.defaultWorkerLLM = defaultWorkerLLM;
+    this.identityManager = identityManager;
   }
 
   /**
@@ -238,6 +246,11 @@ Otherwise, provide specific, actionable critique for what needs to be fixed.
         finalPrompt = `Context Slice:\n${JSON.stringify(canonicalSlice, null, 2)}\n\nUser Task:\n${prompt}`;
       }
 
+      // If targetPeerUrl is configured, delegate remotely over A2A protocol!
+      if (agent.targetPeerUrl) {
+        return await this.dispatchRemoteSubagent(agent, finalPrompt, contextSlice, start);
+      }
+
       const req: LLMRequest = {
         systemInstruction: agent.systemInstruction,
         messages: [{ role: 'user', content: finalPrompt }],
@@ -281,6 +294,63 @@ Otherwise, provide specific, actionable critique for what needs to be fixed.
         error: msg,
       };
     }
+  }
+
+  private async dispatchRemoteSubagent(
+    agent: SubagentDefinition,
+    prompt: string,
+    contextSlice: Record<string, unknown> | undefined,
+    startTime: number
+  ): Promise<SubagentExecutionResult> {
+    const dispatchUrl = agent.targetPeerUrl!.replace(/\/$/, '') + '/api/a2a/dispatch';
+    const dispatchPayload: A2ADispatchRequest = {
+      taskId: `swarm_${agent.id}_${Date.now()}`,
+      senderAgentId: 'swarm-director',
+      task: prompt,
+      contextSlice,
+      skillsFilter: agent.skillsFilter,
+      delegationDepth: 1,
+      thinkingBudget: agent.thinkingBudget,
+    };
+
+    let headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (this.identityManager) {
+      const signed = await this.identityManager.signPayload(dispatchPayload);
+      headers = {
+        ...headers,
+        'X-Talon-Agent-Id': signed.agentId,
+        'X-Talon-Public-Key': signed.publicKey,
+        'X-Talon-Signature': signed.signature,
+        'X-Talon-Timestamp': String(signed.timestamp),
+        'X-Talon-Nonce': signed.nonce,
+      };
+    }
+
+    const res = await fetch(dispatchUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(dispatchPayload),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`A2A Remote Dispatch to ${dispatchUrl} failed (HTTP ${res.status}): ${errText}`);
+    }
+
+    const remoteResult = (await res.json()) as A2ADispatchResponse;
+    return {
+      agentId: agent.id,
+      role: agent.role,
+      output: remoteResult.output,
+      tokensUsed: remoteResult.tokensUsed,
+      durationMs: Date.now() - startTime,
+      success: remoteResult.success,
+      error: remoteResult.error,
+    };
   }
 
   private accumulateTokens(

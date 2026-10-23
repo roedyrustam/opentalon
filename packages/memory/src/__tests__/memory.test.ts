@@ -7,6 +7,9 @@ import {
   type SemanticFact,
   type ScheduledJob,
   type JobExecutionLog,
+  type AgentIdentity,
+  type FederatedPeer,
+  type A2AAuditLog,
 } from '../types.js';
 
 describe('Memory Package - RRF & Cosine Similarity', () => {
@@ -412,6 +415,116 @@ describe('LibSqlMemoryAdapter (In-Memory Engine)', () => {
     expect(imported?.actionPayload.prompt).toBe('Perform daily cleanup');
 
     await freshAdapter.close();
+  });
+
+  it('saves and retrieves singleton agent identity', async () => {
+    const existing = await adapter.getAgentIdentity();
+    expect(existing).toBeNull();
+
+    const identity: AgentIdentity = {
+      id: 'urn:talon:agent:test-node-1',
+      name: 'OpenTalon Node 1',
+      publicKey: 'MCowBQYDK2VwAyEAtestpublickey1234567890=',
+      privateKey: 'MC4CAQAwBQYDK2VwBCIEINtestprivatekey1234567890=',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    await adapter.saveAgentIdentity(identity);
+    const retrieved = await adapter.getAgentIdentity();
+
+    expect(retrieved).not.toBeNull();
+    expect(retrieved?.id).toBe('urn:talon:agent:test-node-1');
+    expect(retrieved?.name).toBe('OpenTalon Node 1');
+    expect(retrieved?.publicKey).toBe(identity.publicKey);
+  });
+
+  it('manages federated peers mesh (save, list, update, delete)', async () => {
+    const peer1: FederatedPeer = {
+      peerId: 'peer-alpha',
+      name: 'Node Alpha',
+      endpointUrl: 'http://127.0.0.1:3200',
+      publicKey: 'pubkey-alpha',
+      capabilities: ['currency-converter', 'http-json-fetcher'],
+      status: 'online',
+      latencyMs: 14.5,
+      lastSeenAt: Date.now(),
+    };
+
+    const peer2: FederatedPeer = {
+      peerId: 'peer-beta',
+      name: 'Node Beta',
+      endpointUrl: 'http://127.0.0.1:3300',
+      publicKey: 'pubkey-beta',
+      capabilities: ['crypto-signer'],
+      status: 'offline',
+      lastSeenAt: Date.now() - 60000,
+    };
+
+    await adapter.saveFederatedPeer(peer1);
+    await adapter.saveFederatedPeer(peer2);
+
+    const allPeers = await adapter.listFederatedPeers();
+    expect(allPeers.length).toBe(2);
+
+    const onlinePeers = await adapter.listFederatedPeers({ status: 'online' });
+    expect(onlinePeers.length).toBe(1);
+    expect(onlinePeers[0].peerId).toBe('peer-alpha');
+    expect(onlinePeers[0].capabilities).toEqual(['currency-converter', 'http-json-fetcher']);
+
+    // Retrieve by ID or endpoint URL
+    const fetchedById = await adapter.getFederatedPeer('peer-alpha');
+    const fetchedByUrl = await adapter.getFederatedPeer('http://127.0.0.1:3200');
+    expect(fetchedById).toEqual(fetchedByUrl);
+
+    // Update status and latency
+    await adapter.updatePeerStatus('peer-alpha', 'unreachable', 250);
+    const updated = await adapter.getFederatedPeer('peer-alpha');
+    expect(updated?.status).toBe('unreachable');
+    expect(updated?.latencyMs).toBe(250);
+
+    // Delete peer
+    const deleted = await adapter.deleteFederatedPeer('peer-beta');
+    expect(deleted).toBe(true);
+    const remaining = await adapter.listFederatedPeers();
+    expect(remaining.length).toBe(1);
+  });
+
+  it('records and queries A2A negotiation and dispatch audit logs', async () => {
+    const log1: A2AAuditLog = {
+      id: 'log-1',
+      traceId: 'trace-a2a-101',
+      peerId: 'peer-alpha',
+      direction: 'outbound',
+      action: 'negotiate',
+      status: 'accepted',
+      payload: { requiredSkills: ['currency-converter'], taskId: 'task-1' },
+      result: { canHandle: true, availableSkills: ['currency-converter'] },
+      durationMs: 4.2,
+      timestamp: Date.now() - 1000,
+    };
+
+    const log2: A2AAuditLog = {
+      id: 'log-2',
+      traceId: 'trace-a2a-102',
+      peerId: 'peer-alpha',
+      direction: 'outbound',
+      action: 'dispatch',
+      status: 'completed',
+      payload: { task: 'Convert 100 USD to EUR' },
+      result: { success: true, output: '92.5 EUR' },
+      durationMs: 82.5,
+      timestamp: Date.now(),
+    };
+
+    await adapter.saveA2AAuditLog(log1);
+    await adapter.saveA2AAuditLog(log2);
+
+    const logs = await adapter.getA2AAuditLogs({ peerId: 'peer-alpha' });
+    expect(logs.length).toBe(2);
+    expect(logs[0].action).toBe('dispatch'); // ordered desc
+    expect(logs[1].action).toBe('negotiate');
+    expect(logs[0].status).toBe('completed');
   });
 });
 

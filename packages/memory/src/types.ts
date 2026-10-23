@@ -167,6 +167,50 @@ export interface IMemoryPort {
   // Snapshot Migration & Backup
   exportSnapshot(options?: { includeTraces?: boolean }): Promise<MemorySnapshot>;
   importSnapshot(snapshot: MemorySnapshot, options?: { overwrite?: boolean }): Promise<ImportSnapshotResult>;
+
+  // A2A Protocol & Mesh Federation
+  getAgentIdentity(): Promise<AgentIdentity | null>;
+  saveAgentIdentity(identity: AgentIdentity): Promise<void>;
+  saveFederatedPeer(peer: FederatedPeer): Promise<void>;
+  getFederatedPeer(peerIdOrEndpoint: string): Promise<FederatedPeer | null>;
+  listFederatedPeers(options?: { status?: 'online' | 'offline' | 'unreachable' }): Promise<FederatedPeer[]>;
+  updatePeerStatus(peerId: string, status: 'online' | 'offline' | 'unreachable', latencyMs?: number): Promise<void>;
+  deleteFederatedPeer(peerId: string): Promise<boolean>;
+  saveA2AAuditLog(log: A2AAuditLog): Promise<void>;
+  getA2AAuditLogs(options?: { peerId?: string; limit?: number }): Promise<A2AAuditLog[]>;
+}
+
+export interface AgentIdentity {
+  id: string; // urn:talon:agent:<uuid>
+  name: string;
+  publicKey: string; // SPKI PEM or Base64
+  privateKey: string; // PKCS8 PEM or Base64
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface FederatedPeer {
+  peerId: string;
+  name: string;
+  endpointUrl: string;
+  publicKey: string;
+  capabilities: string[];
+  status: 'online' | 'offline' | 'unreachable';
+  latencyMs?: number;
+  lastSeenAt: number;
+}
+
+export interface A2AAuditLog {
+  id: string;
+  traceId: string;
+  peerId: string;
+  direction: 'inbound' | 'outbound';
+  action: 'negotiate' | 'dispatch';
+  status: 'accepted' | 'rejected' | 'completed' | 'failed';
+  payload: Record<string, unknown>;
+  result?: Record<string, unknown> | string;
+  durationMs?: number;
+  timestamp: number;
 }
 
 export interface SkillRevision {
