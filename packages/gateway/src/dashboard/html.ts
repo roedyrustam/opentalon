@@ -1699,69 +1699,6 @@ export function getDashboardHtml(): string {
       }
     }
 
-    // 3D Talon Core Mini Hologram
-    function init3DHero() {
-      const cvs = document.getElementById('talon3DHeroCanvas');
-      if (!cvs) return;
-      const c = cvs.getContext('2d');
-      const w = cvs.width, h = cvs.height, cx = w/2, cy = h/2;
-      let angle = 0;
-
-      function draw3D() {
-        angle += 0.025;
-        c.clearRect(0, 0, w, h);
-
-        // Core Quantum Glow
-        const rad = 42 + Math.sin(angle * 2.5) * 2;
-        // Fast path left
-        c.beginPath();
-        c.arc(cx, cy, rad, Math.PI * 0.5, Math.PI * 1.5);
-        c.fillStyle = '#00f2fe';
-        c.shadowBlur = 18;
-        c.shadowColor = '#00f2fe';
-        c.fill();
-
-        // Slow path right
-        c.beginPath();
-        c.arc(cx, cy, rad, Math.PI * 1.5, Math.PI * 0.5);
-        c.fillStyle = '#d946ef';
-        c.shadowBlur = 18;
-        c.shadowColor = '#d946ef';
-        c.fill();
-        c.shadowBlur = 0;
-
-        // Center white node
-        c.beginPath();
-        c.arc(cx, cy, 12, 0, Math.PI * 2);
-        c.fillStyle = '#ffffff';
-        c.fill();
-
-        // Orbiting Claws
-        for (let i = 0; i < 3; i++) {
-          const a = angle + (i * Math.PI * 2) / 3;
-          const x = cx + Math.cos(a) * 78;
-          const y = cy + Math.sin(a) * 32;
-          c.beginPath();
-          c.arc(x, y, 5, 0, Math.PI * 2);
-          c.fillStyle = i % 2 === 0 ? '#38bdf8' : '#c084fc';
-          c.shadowBlur = 10;
-          c.shadowColor = c.fillStyle;
-          c.fill();
-          c.shadowBlur = 0;
-
-          // Talon link
-          c.beginPath();
-          c.moveTo(cx, cy);
-          c.lineTo(x, y);
-          c.strokeStyle = 'rgba(71, 85, 105, 0.4)';
-          c.lineWidth = 2;
-          c.stroke();
-        }
-
-        requestAnimationFrame(draw3D);
-      }
-      draw3D();
-    }
 
     function openNewSkillModal() {
       document.getElementById('new-skill-card').style.display = 'block';
@@ -1919,7 +1856,7 @@ export function getDashboardHtml(): string {
         const z2 = z1 * cosX + y * sinX;
 
         const fov = 400;
-        const scale = fov / (fov + z2 + 150);
+        const scale = Math.max(0.01, fov / (fov + z2 + 150));
         return { x: CX + x1 * scale, y: CY + y2 * scale, scale: scale, z: z2 };
       }
 
@@ -1977,9 +1914,9 @@ export function getDashboardHtml(): string {
 
         const tip = pts[pts.length - 1];
         ctx.beginPath();
-        ctx.arc(tip.x, tip.y, 4 * tip.scale, 0, Math.PI * 2);
+        ctx.arc(tip.x, tip.y, Math.max(0.1, 4 * tip.scale), 0, Math.PI * 2);
         ctx.fillStyle = claw.color;
-        ctx.shadowBlur = 10 * tip.scale;
+        ctx.shadowBlur = Math.max(0, 10 * tip.scale);
         ctx.shadowColor = claw.color;
         ctx.fill();
         ctx.restore();
@@ -2015,7 +1952,7 @@ export function getDashboardHtml(): string {
           const proj = project(px, py, pz);
 
           ctx.beginPath();
-          ctx.arc(proj.x, proj.y, p.size * proj.scale, 0, Math.PI * 2);
+          ctx.arc(proj.x, proj.y, Math.max(0.1, p.size * proj.scale), 0, Math.PI * 2);
           ctx.fillStyle = p.color;
           ctx.shadowBlur = 6;
           ctx.shadowColor = p.color;
@@ -2029,7 +1966,7 @@ export function getDashboardHtml(): string {
 
         // Central Singularity Core
         const coreProj = project(0, 0, 0);
-        const coreRad = (18 + Math.sin(pulseTime * 2) * 2.5 + flashIntensity * 8) * coreProj.scale;
+        const coreRad = Math.max(1, (18 + Math.sin(pulseTime * 2) * 2.5 + flashIntensity * 8) * coreProj.scale);
         const coreGrad = ctx.createRadialGradient(coreProj.x, coreProj.y, 0, coreProj.x, coreProj.y, coreRad);
         coreGrad.addColorStop(0, '#ffffff');
         coreGrad.addColorStop(0.4, '#00f2fe');
@@ -2040,7 +1977,7 @@ export function getDashboardHtml(): string {
         ctx.beginPath();
         ctx.arc(coreProj.x, coreProj.y, coreRad, 0, Math.PI * 2);
         ctx.fillStyle = coreGrad;
-        ctx.shadowBlur = 20 * coreProj.scale;
+        ctx.shadowBlur = Math.max(0, 20 * coreProj.scale);
         ctx.shadowColor = '#00f2fe';
         ctx.fill();
         ctx.restore();
@@ -2566,9 +2503,17 @@ export function getDashboardHtml(): string {
     }
 
     // Auto-load on startup
-    loadStats();
-    init3DHero();
-    initLiveEvents();
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function() {
+        loadStats();
+        init3DHero();
+        initLiveEvents();
+      });
+    } else {
+      loadStats();
+      init3DHero();
+      initLiveEvents();
+    }
   </script>
 </body>
 </html>
