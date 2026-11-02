@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+env:
+  npm_config_strict_dep_builds: 'false'
+  npm_config_verify_deps_before_run: 'false'
+
 jobs:
   verify:
     name: Build & Test (Node ${{ matrix.node-version }})
@@ -32,7 +36,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install Dependencies
-        run: pnpm install --frozen-lockfile --config.strict-dep-builds=false
+        run: pnpm install --frozen-lockfile
 
       - name: Build All Packages
         run: pnpm run build
