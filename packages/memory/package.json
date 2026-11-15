@@ -1,6 +1,6 @@
 {
   "name": "@opentalon/memory",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Unified libSQL/SQLite storage engine with FTS5 BM25 search, vector cosine embeddings, and Reciprocal Rank Fusion (RRF) for OpenTalon",
   "author": "Roedy Rustam <roedyrustam.id@gmail.com>",
   "license": "MIT",

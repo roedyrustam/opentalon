@@ -6,7 +6,7 @@
   <img src="assets/opentalon-3d-master.jpg" alt="OpenTalon 3D Master Emblem — Hermes Wings & Caduceus DNA × OpenClaw Titanium Talon" width="380" style="border-radius: 24px;" />
 </p>
 
-<h1 align="center">🦅🪽 OpenTalon (v0.7.0)</h1>
+<h1 align="center">🦅🪽 OpenTalon (v1.0.0 GA)</h1>
 
 <p align="center">
   <strong>The Sovereign Fusion of Hermes Self-Evolution &amp; OpenClaw Token Frugality</strong><br>
@@ -16,7 +16,8 @@
 <p align="center">
   <a href="https://github.com/roedyrustam/opentalon/actions"><img src="https://img.shields.io/github/actions/workflow/status/roedyrustam/opentalon/ci.yml?branch=main&label=CI%20%2F%20Tests&logo=github" alt="CI Status" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
-  <a href="https://github.com/roedyrustam/opentalon"><img src="https://img.shields.io/badge/Tests-157%20Passing%20(23%20Suites)-10b981?logo=vitest" alt="Tests: 157 Passing" /></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Release-v1.0.0%20Production%20GA-6366f1" alt="Release: v1.0.0 Production GA" /></a>
+  <a href="https://github.com/roedyrustam/opentalon"><img src="https://img.shields.io/badge/Tests-Vitest%20Suite%20Passing-10b981?logo=vitest" alt="Tests: Vitest Suite Passing" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.8%2B%20Strict-3178c6?logo=typescript" alt="TypeScript 5.8+" /></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22%2B%20LTS-339933?logo=node.js" alt="Node.js 22+" /></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-v1.x%20Native-f97316" alt="MCP v1.x" /></a>
@@ -25,7 +26,7 @@
 
 <p align="center">
   <a href="#-quick-start-60-seconds">Quick Start</a> •
-  <a href="#-whats-new-in-v070">What's New in v0.7.0</a> •
+  <a href="#-whats-new-in-v100-production-ga">What's New in v1.0.0 GA</a> •
   <a href="#-architecture-overview">Architecture</a> •
   <a href="#-cli-command-suite">CLI Reference</a> •
   <a href="#-web-cockpit-dashboard-10-built-in-tabs">Web Cockpit</a> •
@@ -39,12 +40,14 @@
 
 Most AI agent frameworks burn **10,000–40,000 tokens per turn**, execute arbitrary untrusted code on your host machine, and repeat the same mistakes without learning. **OpenTalon** fixes all three:
 
-| Capability | Legacy Frameworks | Hermes Agent | OpenClaw | **🦅 OpenTalon v0.7.0** |
+| Capability | Legacy Frameworks | Hermes Agent | OpenClaw | **🦅 OpenTalon v1.0.0 GA** |
 | :--- | :--- | :--- | :--- | :--- |
 | **Token Economy** | 8k–30k tokens/turn | Variable | &lt;2,000 tokens/turn | **&lt;1,500 tokens/turn + Canonical KV-Cache (75–90% saved)** |
 | **Thinking Budget** | Static / Unbounded | Fixed reflection | None | **O(1) Dynamic Entropy Budgeter (`0` to `65,536` tokens)** |
 | **Skill Evolution** | Static tools | Single-draft reflection | Manual plugins | **3x Speculative Multi-Draft Synthesis + Sandbox Benchmark** |
 | **Tool Security** | Raw host shell | High-risk shell | Permissive plugins | **12-Rule SecurityGate + Prompt Firewall + Anti-SSRF Sandbox** |
+| **Observability & Probes** | Manual logs | None | Basic `/health` | **Prometheus `/metrics`, `/health/ready`, `talon doctor` &amp; `benchmark`** |
+| **Edge & Rate Limiting** | Node-only | None | Gateway only | **`SlidingWindowRateLimiter` (429) &amp; Full Serverless Edge Parity** |
 | **Proactive Daemon** | External cron only | None | Gateway polling | **Built-in 1s Heartbeat Scheduler + HMAC Webhook Ingress** |
 | **Multimodal & Grounding** | External wrappers | Text only | Text only | **Native Vision/PDF/Audio `inlineData` + Auto-Saved Web Citations** |
 | **FinOps Governance** | None | None | Prompt pruning | **Live USD Spend Ledger + 80% Daily Frugal Throttle Guard** |
@@ -52,32 +55,41 @@ Most AI agent frameworks burn **10,000–40,000 tokens per turn**, execute arbit
 
 ---
 
-## 🔥 What's New in v0.7.0
+## 🔥 What's New in v1.0.0 (Production GA)
 
-1. **⚡ Gemini Agent Booster Engine (`@opentalon/core`)**
+1. **📊 Prometheus OpenMetrics Telemetry & Readiness Probes (`@opentalon/core`, `@opentalon/gateway`, Docker)**
+   - **`PrometheusExporter`**: Exports standard Prometheus OpenMetrics text (`opentalon_up`, `opentalon_uptime_seconds`, `opentalon_fast_path_turns_total`, `opentalon_avg_thinking_budget_tokens`, `opentalon_kv_cache_hits_total`, `opentalon_kv_cache_misses_total`, `opentalon_kv_cache_tokens_saved_total`, `opentalon_finops_spend_usd_total`, `opentalon_finops_saved_usd_total`, `opentalon_security_scans_total`, `opentalon_security_blocked_total`, `opentalon_skills_registered_total`, `opentalon_traces_recent_count`, plus runtime memory & utilization gauges).
+   - **Production Daemon Endpoints**: `LocalDaemonAdapter` exposes `GET /metrics` (`text/plain; version=0.0.4; charset=utf-8`), `GET /health/ready`, and `GET /healthz`, backed by a built-in Docker `HEALTHCHECK` in `deployments/docker/Dockerfile` (`pnpm@9.15.9`).
+2. **🚦 Sliding-Window Rate Limiting & Full Serverless Edge Parity (`@opentalon/gateway`)**
+   - **`SlidingWindowRateLimiter`**: Configurable sliding-window limiter (`windowMs`, `maxRequests`, bounded `maxTrackedKeys`) returning standard rate-limit headers and HTTP `429 Too Many Requests` across both `ServerlessEdgeAdapter` and `LocalDaemonAdapter`.
+   - **Full Serverless Edge Feature Parity**: `ServerlessEdgeAdapter` now supports public `/health`, `/health/ready`, `/healthz`, `/privacy`, `/terms`, `/delete-account`, authenticated `POST /api/privacy/delete-data`, `GET /api/security/report`, `POST /api/security/audit`, `GET /api/finops/report`, `GET /api/booster/stats`, and full multimodal/grounding/thinking Fast Path payloads (`attachments`, `enableSearchGrounding`, `autoSaveGroundedFacts`, `thinkingConfig`).
+3. **🩺 System Doctor & Deterministic Performance Benchmarks (`talon doctor`, `talon benchmark`)**
+   - **`talon doctor`**: Executes 8 live production-readiness and zero-trust checks (Node.js `>= 20`, SQLite + FTS5 hybrid memory, VM sandbox isolation, 12-rule `SecurityGate`, `PromptInjectionFirewall` + secret redaction, Ed25519 A2A identity sign/verify, FinOps budget envelope, and registered procedural skills audit) with `--db <path>` and `--json`.
+   - **`talon benchmark`**: Runs deterministic throughput (`ops/sec`) and latency (`ms`) micro-benchmarks across `ThinkingBudgetCalculator.evaluate`, canonical KV-Cache prefix hashing (`TokenBudgeter`), `PromptInjectionFirewall.scan`, `SecurityGate.auditSkillCode`, `SandboxedVmRunner.execute`, and `LibSqlMemoryAdapter` FTS5 + Hybrid RRF retrieval.
+4. **⚡ Gemini Agent Booster Engine (`@opentalon/core`)**
    - **`ThinkingBudgetCalculator`**: Zero-latency (`O(1)`) task entropy evaluator scoring lexical complexity, code blocks, security/architecture keywords, tool count, and multimodal attachments to dynamically allocate `0` to `65,536` System-2 thinking tokens.
    - **Canonical KV-Cache Prefix Pinning (`TokenBudgeter`)**: Alphabetically canonicalizes `ToolDefinition[]`, nested JSON Schema keys, and `SemanticFact[]` (`category:key`) with SHA-256 fingerprinting (`prefixHash`) to guarantee 100% byte-identical prompt prefixes across turns.
-   - **Auto-Wired `ContextCacheManager`**: Tracks implicit prefix reuse and explicit Gemini `cachedContents` (75–90% cost discount) with bounded LRU eviction (`maxEntries: 200`) and automatic failover (`gemini-4-pro` / `gemini-4-argon` $\rightarrow$ `gemini-3.8-flash`).
-2. **🖼️ Native Multimodal Vision, PDF & Audio Grounding**
+   - **`ContextCacheManager`**: Tracks implicit prefix reuse and explicit Gemini `cachedContents` (75–90% cost discount) with bounded LRU eviction (`maxEntries: 200`) and automatic failover (`gemini-4-pro` / `gemini-4-argon` $\rightarrow$ `gemini-3.8-flash`).
+5. **🖼️ Native Multimodal Vision, PDF & Audio Grounding**
    - Attach images, screenshots, PDFs, or audio clips (`MultimodalAttachment`) directly via API or the Web Cockpit's **`📎 Attach`** bar.
-3. **🌐 Autonomous Grounded Research Memory**
+6. **🌐 Autonomous Grounded Research Memory**
    - Verified Google Search Grounding citations (`GroundingMetadata.sources`) are automatically persisted into `semantic_facts` (`category: 'grounded_research'`) so future turns recall verified facts at **0 search cost**.
-4. **🧬 Speculative Multi-Draft Skill Evolution**
+7. **🧬 Speculative Multi-Draft Skill Evolution**
    - `EvolutionEngine` concurrently synthesizes $N$ candidate `SKILL.md` implementations across varied temperatures (`0.1`, `0.35`, `0.6`, `0.8`, `0.9`), benchmarks every candidate inside the Zero-Trust Sandbox, and commits the fastest passing winner (`talon evolve --speculative 3`).
-5. **💰 Sovereign FinOps Cost Envelope & Frugal Throttle Guard**
+8. **💰 Sovereign FinOps Cost Envelope & Frugal Throttle Guard**
    - Tracks real-time USD cost and KV-cache USD savings per model (`FinOpsBudgetTracker`). Automatically activates a **Frugal Throttle Guard** at $\ge 80\%$ daily budget utilization, capping `thinkingBudget` at $\le 2,048$ tokens to prevent runaway API bills.
-6. **⏰ Proactive Heartbeat Scheduler & HMAC Webhook Ingress**
+9. **⏰ Proactive Heartbeat Scheduler & HMAC Webhook Ingress**
    - Built-in `CronScheduler` supporting UNIX cron (`*/15 * * * *`), aliases (`@hourly`, `@daily`), and natural intervals (`every 30s`, `every 15m`) with **0-Token Direct Skill Execution** and `POST /api/webhooks/:name` HMAC SHA-256 verification.
-7. **🤝 A2A Protocol & Multi-Daemon P2P Mesh Federation (v0.6.0)**
-   - Decentralized Peer-to-Peer mesh federation powered by auto-generated **Ed25519 asymmetric keypairs** stored in SQLite (`agent_identity`).
-   - Discovers nodes via standard **`/.well-known/agent.json` Agent Cards**.
-   - Zero-token capability negotiation (`POST /api/a2a/negotiate`) and signed task delegation (`POST /api/a2a/dispatch`) with replay attack shields (`nonce` deduplication cache + $\pm60$s skew check) and circular delegation loop prevention (`delegationDepth <= 3`).
-8. **🛡️ Zero-Trust Security Gate, Prompt-Injection Firewall & Anti-SSRF Shield (v0.7.0)**
-   - **`SecurityGate` (`@opentalon/skill-engine`)**: 12 deterministic static code & capability rules (`SEC-001`..`SEC-012`) enforcing prototype-pollution blocks, `eval`/`new Function` bans, restricted host module checks, unbounded infinite-loop detection (`SEC-007`), and ReDoS mitigation — gating both `SkillSynthesizer` (`!passed`) and `SandboxedVmRunner` (`critical`).
-   - **Anti-SSRF Metadata & Wildcard Shield (`CapabilityValidator`)**: Blocks wildcard `'*'` network grants and cloud instance metadata targets (`169.254.169.254`, `metadata.google.internal`, `100.100.100.200`, `fd00:ec2::254`, `0.0.0.0`).
-   - **`PromptInjectionFirewall` (`@opentalon/core`)**: Automatically pre-scans inbound prompts in `DualBrainRouter` (`PI-001`..`PI-005`), supports `sanitize` (default), `block`, and `audit` modes, and redacts API keys (`sk-...`, `AIza...`) & PEM private keys into `[REDACTED_*]` placeholders.
-9. **⚖️ Mandatory Legal, Privacy & Right-to-Erasure Trio (UU PDP / GDPR)**
-   - Built-in bilingual (EN/ID) pages for `/privacy`, `/terms`, and `/delete-account`, backed by `IMemoryPort.deleteSessionData(sessionId)` and `POST /api/privacy/delete-data` compliant with **UU No. 27/2022 (UU PDP)** and **GDPR Art. 17**.
+10. **🤝 A2A Protocol & Multi-Daemon P2P Mesh Federation (v0.6.0)**
+    - Decentralized Peer-to-Peer mesh federation powered by auto-generated **Ed25519 asymmetric keypairs** stored in SQLite (`agent_identity`).
+    - Discovers nodes via standard **`/.well-known/agent.json` Agent Cards**.
+    - Zero-token capability negotiation (`POST /api/a2a/negotiate`) and signed task delegation (`POST /api/a2a/dispatch`) with replay attack shields (`nonce` deduplication cache + $\pm60$s skew check) and circular delegation loop prevention (`delegationDepth <= 3`).
+11. **🛡️ Zero-Trust Security Gate, Prompt-Injection Firewall & Anti-SSRF Shield (v0.7.0)**
+    - **`SecurityGate` (`@opentalon/skill-engine`)**: 12 deterministic static code & capability rules (`SEC-001`..`SEC-012`) enforcing prototype-pollution blocks, `eval`/`new Function` bans, restricted host module checks, unbounded infinite-loop detection (`SEC-007`), and ReDoS mitigation — gating both `SkillSynthesizer` (`!passed`) and `SandboxedVmRunner` (`critical`).
+    - **Anti-SSRF Metadata & Wildcard Shield (`CapabilityValidator`)**: Blocks wildcard `'*'` network grants and cloud instance metadata targets (`169.254.169.254`, `metadata.google.internal`, `100.100.100.200`, `fd00:ec2::254`, `0.0.0.0`).
+    - **`PromptInjectionFirewall` (`@opentalon/core`)**: Automatically pre-scans inbound prompts in `DualBrainRouter` (`PI-001`..`PI-005`), supports `sanitize` (default), `block`, and `audit` modes, and redacts API keys (`sk-...`, `AIza...`) & PEM private keys into `[REDACTED_*]` placeholders.
+12. **⚖️ Mandatory Legal, Privacy & Right-to-Erasure Trio (UU PDP / GDPR)**
+    - Built-in bilingual (EN/ID) pages for `/privacy`, `/terms`, and `/delete-account`, backed by `IMemoryPort.deleteSessionData(sessionId)` and `POST /api/privacy/delete-data` compliant with **UU No. 27/2022 (UU PDP)** and **GDPR Art. 17**.
 
 ---
 
@@ -128,7 +140,7 @@ pnpm install
 # Build all 5 monorepo packages
 pnpm build
 
-# Run the 157 unit & integration tests across 23 test files
+# Run the full unit & integration test suite
 pnpm test
 ```
 
@@ -206,6 +218,11 @@ pnpm talon analyze .
 pnpm talon security status                                  # View firewall policy & audit all DB skills
 pnpm talon security scan "Ignore prior rules" --mode block  # Scan prompt for injections & secrets
 pnpm talon security audit-skill ./examples/skills/math-stats-calculator.md   # Audit SKILL.md against SEC-001..SEC-012
+
+# 11. Production Diagnostics, Readiness & Benchmarks (v1.0.0 GA)
+pnpm talon doctor                                           # Run 8-point zero-trust & runtime readiness checks
+pnpm talon doctor --json                                    # Machine-readable JSON health report
+pnpm talon benchmark -n 50                                  # Benchmark RRF, KV-Cache hash, Firewall, SecurityGate & Sandbox
 ```
 
 ---
@@ -214,11 +231,11 @@ pnpm talon security audit-skill ./examples/skills/math-stats-calculator.md   # A
 
 | Package | Path | Description |
 | :--- | :--- | :--- |
-| **`@opentalon/core`** | [`packages/core`](packages/core) | `DualBrainRouter`, `PromptInjectionFirewall`, `ThinkingBudgetCalculator`, `FinOpsBudgetTracker`, `ContextCacheManager`, `EvolutionEngine`, `SwarmDirector`, `CronScheduler`, `McpServer`, and 7 LLM Drivers. |
+| **`@opentalon/core`** | [`packages/core`](packages/core) | `DualBrainRouter`, `PrometheusExporter`, `SystemDoctor`, `PromptInjectionFirewall`, `ThinkingBudgetCalculator`, `FinOpsBudgetTracker`, `ContextCacheManager`, `EvolutionEngine`, `SwarmDirector`, `CronScheduler`, `McpServer`, and 7 LLM Drivers. |
 | **`@opentalon/memory`** | [`packages/memory`](packages/memory) | `LibSqlMemoryAdapter` (SQLite / Turso), FTS5 BM25 full-text search, Float32 vector cosine similarity, Reciprocal Rank Fusion (RRF), and `deleteSessionData` right-to-erasure cleanup. |
 | **`@opentalon/skill-engine`** | [`packages/skill-engine`](packages/skill-engine) | `SecurityGate` (`SEC-001`..`SEC-012`), `SandboxedVmRunner`, `VirtualFs`, anti-SSRF `CapabilityValidator`, `SkillMarkdownParser`, `SkillSynthesizer`, `SkillVersionManager`, and `RemoteSkillInstaller`. |
-| **`@opentalon/gateway`** | [`packages/gateway`](packages/gateway) | `LocalDaemonAdapter`, `ServerlessEdgeAdapter` (Cloudflare Workers), `SseStreamAdapter`, HMAC Webhook Ingress, Legal/Privacy Trio (`/privacy`, `/terms`, `/delete-account`), and 10-Tab Web Cockpit. |
-| **`talon` (CLI)** | [`packages/cli`](packages/cli) | Unified command-line interface for local orchestration, REPL chat, security auditing (`talon security`), daemon management, and CI automation. |
+| **`@opentalon/gateway`** | [`packages/gateway`](packages/gateway) | `LocalDaemonAdapter` (`/metrics`, `/health/ready`, `/healthz`), `ServerlessEdgeAdapter` (full Edge parity), `SlidingWindowRateLimiter` (HTTP 429), `SseStreamAdapter`, HMAC Webhook Ingress, Legal/Privacy Trio (`/privacy`, `/terms`, `/delete-account`), and 10-Tab Web Cockpit. |
+| **`talon` (CLI)** | [`packages/cli`](packages/cli) | Unified command-line interface for local orchestration, REPL chat, `talon doctor`, `talon benchmark`, `talon security`, daemon management, and CI automation. |
 
 ---
 
@@ -243,6 +260,7 @@ If you find OpenTalon useful, please consider giving the repository a ⭐ **Star
 2. **Hyper-Frugal Token Economy (Gaya OpenClaw + Gemini Agent Booster):** Menjaga anggaran *Fast Path* `< 1.500` token/turn dengan *Canonical KV-Cache Prefix Pinning* (hemat biaya 75–90%) dan *O(1) Dynamic Thinking Budget* (`0` s/d `65.536` token).
 3. **Zero-Trust Security Gate, Prompt Firewall & Anti-SSRF Sandbox:** Dilengkapi `SecurityGate` (12 aturan statis `SEC-001`..`SEC-012`), pemblokir host metadata cloud anti-SSRF & host wildcard `'*'`, serta `PromptInjectionFirewall` (`PI-001`..`PI-005`) yang meredaksi otomatis kunci API dan *private key* PEM.
 4. **Proactive Background Daemon, FinOps & Kepatuhan Privasi (UU PDP / GDPR):** Dilengkapi penjadwal cron internal 1 detik (`talon cron`), webhook HMAC SHA-256, dukungan Multimodal Vision/PDF, *FinOps Frugal Throttle Guard*, serta trio halaman legal & penghapusan data (`/privacy`, `/terms`, `/delete-account`).
+5. **Observabilitas Produksi v1.0.0 GA, Rate Limiting & Diagnostik:** Menyediakan endpoint Prometheus `/metrics`, readiness probe `/health/ready`, `SlidingWindowRateLimiter` (HTTP 429) dengan paritas penuh di Serverless Edge, serta perintah CLI `talon doctor` dan `talon benchmark`.
 
 ---
 

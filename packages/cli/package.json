@@ -1,6 +1,6 @@
 {
   "name": "talon",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Unified CLI binary for OpenTalon: developer tooling, interactive REPL chat, local HTTP daemon, visual dashboard cockpit, MCP server, and multi-agent swarm orchestrator",
   "author": "Roedy Rustam <roedyrustam.id@gmail.com>",
   "license": "MIT",

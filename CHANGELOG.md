@@ -2,6 +2,17 @@
 
 All notable changes to the **OpenTalon** project are documented in this file.
 
+## [1.0.0] - 2026-11-15 — Production GA Release: Prometheus Observability, Edge Rate Limiting, System Doctor & Benchmark Suite
+
+### Added
+- **Prometheus OpenMetrics Exporter (`PrometheusExporter` in `@opentalon/core`)**: Added `getMetricsSnapshot()` and `exportMetrics()` exposing `opentalon_*` counters and gauges (`opentalon_up`, `opentalon_uptime_seconds`, `opentalon_fast_path_turns_total`, `opentalon_avg_thinking_budget_tokens`, `opentalon_kv_cache_hits_total`, `opentalon_kv_cache_misses_total`, `opentalon_kv_cache_tokens_saved_total`, `opentalon_finops_spend_usd_total`, `opentalon_finops_saved_usd_total`, `opentalon_security_scans_total`, `opentalon_security_blocked_total`, `opentalon_skills_registered_total`, `opentalon_traces_recent_count`, plus runtime heap/RSS and FinOps/firewall gauges).
+- **System Doctor & Benchmark Engine (`SystemDoctor` in `@opentalon/core`)**: Added `runDiagnostics()` (8 live production & zero-trust self-checks) and `runBenchmark()` deterministic micro-benchmark runner.
+- **Sliding-Window Rate Limiter (`SlidingWindowRateLimiter` in `@opentalon/gateway`)**: Configurable `RateLimitConfig` (`windowMs`, `maxRequests`, `maxTrackedKeys`), standard rate-limit response headers, and HTTP `429 Too Many Requests` enforcement across both `ServerlessEdgeAdapter` and `LocalDaemonAdapter`.
+- **Full Serverless Edge Feature Parity (`ServerlessEdgeAdapter`)**: Added public GET routes (`/health`, `/health/ready`, `/healthz`, `/privacy`, `/privacy-policy`, `/terms`, `/terms-and-conditions`, `/delete-account`, `/data-deletion`), authenticated endpoints (`POST /api/privacy/delete-data`, `GET /api/security/report`, `POST /api/security/audit`, `GET /api/finops/report`, `GET /api/booster/stats`), and multimodal/grounding/thinking Fast Path payload parity.
+- **Local Daemon Observability & Readiness (`LocalDaemonAdapter`)**: Added `GET /metrics` (`text/plain; version=0.0.4; charset=utf-8`), `GET /health/ready`, `GET /healthz`, optional `rateLimit`, and bumped Agent Card version to `1.0.0`.
+- **CLI Diagnostics & Benchmarks (`packages/cli`)**: Bumped `talon` CLI to `1.0.0`, added `talon doctor` (`--db`, `--json`) running 8 live production-readiness and zero-trust checks, and added `talon benchmark` (`-n, --iterations`, `--json`) measuring ops/sec and avg latency across `ThinkingBudgetCalculator`, `TokenBudgeter` KV-Cache hashing, `PromptInjectionFirewall`, `SecurityGate`, `SandboxedVmRunner`, and `LibSqlMemoryAdapter` FTS5 + Hybrid RRF retrieval.
+- **Docker & Package Version Synchronization**: Synchronized `"version": "1.0.0"` across root and all workspace packages (`@opentalon/core`, `@opentalon/memory`, `@opentalon/skill-engine`, `@opentalon/gateway`, `talon`, `opentalon-cloudflare-worker`), aligned `deployments/docker/Dockerfile` to `pnpm@9.15.9`, and added Docker `HEALTHCHECK` targeting `/health/ready`.
+
 ## [0.7.0] - 2026-11-15 — Zero-Trust Security Gate, Prompt-Injection Firewall & Anti-SSRF Sandbox Shield
 
 ### Added

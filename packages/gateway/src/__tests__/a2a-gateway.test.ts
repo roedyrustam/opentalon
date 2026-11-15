@@ -72,7 +72,7 @@ describe('A2A Protocol Gateway Endpoints', () => {
 
     const card = (await res.json()) as AgentCard;
     expect(card.urn).toMatch(/^urn:talon:agent:/);
-    expect(card.version).toBe('0.6.0');
+    expect(card.version).toBe('1.0.0');
     expect(card.status).toBe('online');
     expect(card.publicKey).toContain('BEGIN PUBLIC KEY');
     expect(card.endpoints.agentCard).toBe(`${baseUrl}/.well-known/agent.json`);

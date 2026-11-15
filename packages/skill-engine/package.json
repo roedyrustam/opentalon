@@ -1,6 +1,6 @@
 {
   "name": "@opentalon/skill-engine",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Zero-Trust capability-gated sandbox runtime, SKILL.md parser, versioning/rollback engine, and autonomous skill synthesizer for OpenTalon",
   "author": "Roedy Rustam <roedyrustam.id@gmail.com>",
   "license": "MIT",

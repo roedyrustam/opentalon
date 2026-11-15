@@ -1,6 +1,6 @@
 {
   "name": "opentalon-monorepo",
-  "version": "0.7.0",
+  "version": "1.0.0",
   "private": true,
   "description": "OpenTalon - Sovereign Self-Evolving AI Agent Framework combining OpenClaw multi-channel gateway, Hermes 3-tier memory, Zero-Trust VM Sandbox, and Gemini Agent Booster 5-Pillar FinOps Engine",
   "keywords": [

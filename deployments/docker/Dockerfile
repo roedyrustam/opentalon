@@ -3,7 +3,7 @@ FROM node:22-alpine AS builder
 
 WORKDIR /build
 
-RUN corepack enable && corepack prepare pnpm@11.21.0 --activate
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 # Copy workspace configurations
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* tsconfig.base.json vitest.config.ts ./
@@ -18,7 +18,7 @@ FROM node:22-alpine AS runner
 
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@11.21.0 --activate
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 # Copy built artifacts and workspace files
 COPY --from=builder /build/package.json /build/pnpm-workspace.yaml ./
@@ -36,6 +36,8 @@ ENV NODE_ENV=production
 ENV TALON_DB_PATH=/app/data/opentalon.db
 
 EXPOSE 3100
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD wget -qO- http://127.0.0.1:3100/health/ready || exit 1
 
 # Default command: launch local HTTP daemon
 CMD ["talon", "serve", "--port", "3100", "--host", "0.0.0.0"]

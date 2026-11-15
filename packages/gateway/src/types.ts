@@ -38,4 +38,5 @@ export interface GatewayResponsePayload {
 export interface ServerlessEdgeConfig {
   apiKeyHeader?: string;
   expectedApiKey?: string;
+  rateLimit?: import('./security/rate-limiter.js').RateLimitConfig;
 }

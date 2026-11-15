@@ -1,6 +1,6 @@
 {
   "name": "@opentalon/core",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Zero-latency in-process control plane, Dual-Brain Router (<1,500 token fast path), Hexagonal LLM Port, Hermes Evolution Engine, MCP v1.x Server/Client, and Multi-Agent Swarm Director",
   "author": "Roedy Rustam <roedyrustam.id@gmail.com>",
   "license": "MIT",

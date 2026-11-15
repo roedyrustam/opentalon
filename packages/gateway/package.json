@@ -1,6 +1,6 @@
 {
   "name": "@opentalon/gateway",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Hexagonal Ingress Gateways for OpenTalon: Local Daemon with embedded Visual Cockpit Dashboard, Serverless Edge Adapter (Cloudflare Workers/Lambda), and SSE Streaming Adapter",
   "author": "Roedy Rustam <roedyrustam.id@gmail.com>",
   "license": "MIT",

@@ -27,6 +27,7 @@ import {
 } from '../dashboard/legal-pages.js';
 import { SseStreamAdapter } from './sse-stream.js';
 import { RemoteSkillInstaller, SecurityGate } from '@opentalon/skill-engine';
+import { SlidingWindowRateLimiter, type RateLimitConfig } from '../security/rate-limiter.js';
 
 export interface LocalDaemonOptions {
   port?: number;
@@ -34,6 +35,7 @@ export interface LocalDaemonOptions {
   enableDashboard?: boolean;
   scheduler?: CronScheduler;
   webhookSecret?: string;
+  rateLimit?: RateLimitConfig;
 }
 
 export class LocalDaemonAdapter {
@@ -47,6 +49,7 @@ export class LocalDaemonAdapter {
   private scheduler: CronScheduler;
   private webhookSecret?: string;
   private identityManager: AgentIdentityManager;
+  private rateLimiter?: SlidingWindowRateLimiter;
 
   constructor(router: DualBrainRouter, options: LocalDaemonOptions = {}) {
     this.router = router;
@@ -57,6 +60,9 @@ export class LocalDaemonAdapter {
     this.swarmDirector = new SwarmDirector(router.getLLM());
     this.webhookSecret = options.webhookSecret ?? process.env.TALON_WEBHOOK_SECRET;
     this.identityManager = new AgentIdentityManager(router.getMemory());
+    if (options.rateLimit) {
+      this.rateLimiter = new SlidingWindowRateLimiter(options.rateLimit);
+    }
 
     this.scheduler =
       options.scheduler ||
@@ -97,10 +103,60 @@ export class LocalDaemonAdapter {
           return;
         }
 
-        // 1. Healthcheck
+        // Optional Sliding-Window Rate Limiting
+        if (this.rateLimiter) {
+          const rawCf = req.headers['cf-connecting-ip'];
+          const rawXff = req.headers['x-forwarded-for'];
+          const cfIp = Array.isArray(rawCf) ? rawCf[0] : rawCf;
+          const xffIp = Array.isArray(rawXff) ? rawXff[0] : rawXff;
+          const clientKey = cfIp || xffIp || req.socket?.remoteAddress || 'anonymous';
+          const rl = this.rateLimiter.check(clientKey);
+          const rlHeaders = this.rateLimiter.toHeaders(rl);
+          for (const [key, val] of Object.entries(rlHeaders)) {
+            res.setHeader(key, val);
+          }
+          if (!rl.allowed) {
+            res.writeHead(429, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                error: 'Too Many Requests: Rate limit exceeded',
+                retryAfterSeconds: rl.retryAfterSeconds,
+              })
+            );
+            return;
+          }
+        }
+
+        // 1. Healthcheck & Readiness Probes
         if (req.method === 'GET' && url.pathname === '/health') {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ status: 'ok', daemon: 'local' }));
+          return;
+        }
+
+        if (req.method === 'GET' && (url.pathname === '/health/ready' || url.pathname === '/healthz')) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              status: 'ok',
+              daemon: 'local',
+              version: '1.0.0',
+              uptimeSeconds: Math.round(process.uptime()),
+            })
+          );
+          return;
+        }
+
+        // 1b. Prometheus / OpenMetrics Telemetry Endpoint
+        if (req.method === 'GET' && url.pathname === '/metrics') {
+          try {
+            const metricsText = await this.formatPrometheusMetrics();
+            res.writeHead(200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8' });
+            res.end(metricsText);
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end(`# ERROR ${String(err)}\n`);
+          }
           return;
         }
 
@@ -1016,7 +1072,7 @@ export class LocalDaemonAdapter {
             const card: AgentCard = {
               urn: identity.id,
               name: identity.name,
-              version: '0.6.0',
+              version: '1.0.0',
               publicKey: identity.publicKey,
               endpoints: {
                 base: baseUrl,
@@ -1486,5 +1542,103 @@ export class LocalDaemonAdapter {
         resolve();
       }
     });
+  }
+
+  private async formatPrometheusMetrics(): Promise<string> {
+    const memory = this.router.getMemory();
+    const [skills, traces] = await Promise.all([
+      memory.listSkills(),
+      memory.getRecentTraces(100),
+    ]);
+    const booster = this.router.getBoosterStats();
+    const uptimeSeconds = Math.round(process.uptime());
+    const kvHits = (booster.prefixHits ?? 0) + (booster.cacheHits ?? 0);
+
+    const metrics: Array<{ name: string; help: string; type: 'gauge' | 'counter'; value: number }> = [
+      {
+        name: 'opentalon_up',
+        help: 'OpenTalon local daemon availability (1 = up).',
+        type: 'gauge',
+        value: 1,
+      },
+      {
+        name: 'opentalon_uptime_seconds',
+        help: 'OpenTalon daemon process uptime in seconds.',
+        type: 'gauge',
+        value: uptimeSeconds,
+      },
+      {
+        name: 'opentalon_fast_path_turns_total',
+        help: 'Total Fast Path turns executed by DualBrainRouter.',
+        type: 'counter',
+        value: booster.fastPathTurnsCount ?? 0,
+      },
+      {
+        name: 'opentalon_avg_thinking_budget_tokens',
+        help: 'Average System-2 thinking budget allocated per Fast Path turn.',
+        type: 'gauge',
+        value: booster.avgThinkingBudget ?? 0,
+      },
+      {
+        name: 'opentalon_kv_cache_hits_total',
+        help: 'Total KV-cache prefix and explicit cachedContent hits.',
+        type: 'counter',
+        value: kvHits,
+      },
+      {
+        name: 'opentalon_kv_cache_misses_total',
+        help: 'Total explicit context cache misses.',
+        type: 'counter',
+        value: booster.cacheMisses ?? 0,
+      },
+      {
+        name: 'opentalon_kv_cache_tokens_saved_total',
+        help: 'Total estimated prompt tokens saved via KV-cache reuse.',
+        type: 'counter',
+        value: booster.estimatedTokensSaved ?? 0,
+      },
+      {
+        name: 'opentalon_finops_spend_usd_total',
+        help: 'Total estimated LLM spend in USD.',
+        type: 'counter',
+        value: booster.finops?.totalEstimatedCostUsd ?? 0,
+      },
+      {
+        name: 'opentalon_finops_saved_usd_total',
+        help: 'Total estimated USD saved via KV-cache reuse.',
+        type: 'counter',
+        value: booster.finops?.totalEstimatedSavingsUsd ?? 0,
+      },
+      {
+        name: 'opentalon_security_scans_total',
+        help: 'Total prompt scans executed by PromptInjectionFirewall.',
+        type: 'counter',
+        value: booster.security?.totalScanned ?? 0,
+      },
+      {
+        name: 'opentalon_security_blocked_total',
+        help: 'Total requests blocked by PromptInjectionFirewall.',
+        type: 'counter',
+        value: booster.security?.blockedCount ?? 0,
+      },
+      {
+        name: 'opentalon_skills_registered_total',
+        help: 'Number of procedural skills currently registered in memory.',
+        type: 'gauge',
+        value: skills.length,
+      },
+      {
+        name: 'opentalon_traces_recent_count',
+        help: 'Count of recent episodic traces retrieved (up to 100).',
+        type: 'gauge',
+        value: traces.length,
+      },
+    ];
+
+    return (
+      metrics
+        .map((m) => `# HELP ${m.name} ${m.help}\n# TYPE ${m.name} ${m.type}\n${m.name} ${m.value}`)
+        .join('\n') + '\n'
+    );
   }
 }

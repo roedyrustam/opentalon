@@ -23,3 +23,5 @@ export * from './scheduler/index.js';
 export * from './a2a/types.js';
 export * from './a2a/identity-manager.js';
 export * from './security/prompt-firewall.js';
+export * from './telemetry/prometheus-exporter.js';
+export * from './telemetry/system-doctor.js';
