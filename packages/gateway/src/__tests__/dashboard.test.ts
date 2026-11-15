@@ -62,6 +62,10 @@ describe('Gateway - Embedded Web Dashboard & Cockpit APIs', () => {
     expect(html).toContain('a2a-peers-table-body');
     expect(html).toContain('a2a-logs-table-body');
     expect(html).toContain('a2a-node-urn');
+    expect(html).toContain('Security Shield');
+    expect(html).toContain('/privacy');
+    expect(html).toContain('/terms');
+    expect(html).toContain('/delete-account');
   });
 
   it('returns statistics via GET /api/stats', async () => {

@@ -22,6 +22,7 @@ import { FinOpsBudgetTracker } from '../token/finops-tracker.js';
 import { ContextCacheManager } from '../drivers/context-cache-manager.js';
 import { GeminiDriver } from '../drivers/gemini-driver.js';
 import { CascadingLLMDriver } from '../drivers/cascading-driver.js';
+import { PromptInjectionFirewall } from '../security/prompt-firewall.js';
 
 export class DualBrainRouter extends EventEmitter {
   private memory: IMemoryPort;
@@ -31,6 +32,7 @@ export class DualBrainRouter extends EventEmitter {
   private evolutionEngine: EvolutionEngine;
   private cacheManager: ContextCacheManager;
   private finopsTracker: FinOpsBudgetTracker;
+  private firewall: PromptInjectionFirewall;
   private maxFastPathTokens: number;
   private enableAsyncEvolution: boolean;
   private evolutionDebounceMs: number;
@@ -65,6 +67,8 @@ export class DualBrainRouter extends EventEmitter {
         driver: resolvedGeminiDriver,
       });
     this.finopsTracker = config.finopsTracker ?? new FinOpsBudgetTracker();
+    this.firewall =
+      config.firewall ?? new PromptInjectionFirewall({ mode: 'sanitize', redactSecrets: true });
     this.maxFastPathTokens = config.maxFastPathTokens ?? 1500;
     this.enableAsyncEvolution = config.enableAsyncEvolution ?? true;
     this.evolutionDebounceMs = config.evolutionDebounceMs ?? 5000;
@@ -104,9 +108,14 @@ export class DualBrainRouter extends EventEmitter {
     return this.finopsTracker;
   }
 
+  public getFirewall(): PromptInjectionFirewall {
+    return this.firewall;
+  }
+
   public getBoosterStats() {
     const cacheStats = this.cacheManager.getStats();
     const finops = this.finopsTracker.getReport();
+    const security = this.firewall.getStats();
     return {
       ...cacheStats,
       fastPathTurnsCount: this.fastPathTurnsCount,
@@ -115,6 +124,7 @@ export class DualBrainRouter extends EventEmitter {
           ? Math.round(this.totalThinkingBudgetAllocated / this.fastPathTurnsCount)
           : 0,
       finops,
+      security,
     };
   }
 
@@ -133,7 +143,15 @@ export class DualBrainRouter extends EventEmitter {
   public async executeFastPath(options: FastPathOptions): Promise<FastPathResult> {
     const startTime = Date.now();
     const sessionId = options.sessionId;
-    const input = options.input;
+    const securityScan = this.firewall.scan(options.input);
+    if (securityScan.action === 'blocked') {
+      throw new Error(
+        `[PromptInjectionFirewall] Request blocked due to security threat: ${securityScan.threats
+          .map((t) => t.ruleId)
+          .join(', ')}`
+      );
+    }
+    const input = securityScan.sanitizedText;
     const topK = options.topKSkills ?? 3;
     const tokenBudget = options.maxTokensBudget ?? this.maxFastPathTokens;
 
@@ -470,6 +488,7 @@ export class DualBrainRouter extends EventEmitter {
       tokensSaved: cacheResolution.tokensSaved,
       estimatedCostUsd: ledgerEntry.estimatedCostUsd,
       estimatedSavingsUsd: ledgerEntry.estimatedSavingsUsd,
+      securityScan,
     };
   }
 

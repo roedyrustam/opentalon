@@ -526,6 +526,67 @@ describe('LibSqlMemoryAdapter (In-Memory Engine)', () => {
     expect(logs[1].action).toBe('negotiate');
     expect(logs[0].status).toBe('completed');
   });
+
+  it('erases targeted session data via deleteSessionData and supports global "*" wipe', async () => {
+    const now = Date.now();
+    await adapter.saveTrace({
+      id: 'trace-erase-1',
+      sessionId: 'sess-erase-target',
+      input: 'Delete my account data',
+      output: 'Acknowledged',
+      retrievedSkillIds: [],
+      toolCalls: [],
+      tokensUsed: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+      latencyMs: 12,
+      success: true,
+      timestamp: now,
+    });
+    await adapter.saveTrace({
+      id: 'trace-keep-1',
+      sessionId: 'sess-keep-intact',
+      input: 'Keep this session',
+      output: 'Kept',
+      retrievedSkillIds: [],
+      toolCalls: [],
+      tokensUsed: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+      latencyMs: 10,
+      success: true,
+      timestamp: now,
+    });
+
+    await adapter.saveFact({
+      id: 'fact-erase-1',
+      sessionId: 'sess-erase-target',
+      category: 'user_preference',
+      key: 'temp_token_pref',
+      value: 'ephemeral',
+      confidence: 1.0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await adapter.saveFact({
+      id: 'fact-keep-1',
+      sessionId: 'sess-keep-intact',
+      category: 'user_preference',
+      key: 'retained_pref',
+      value: 'persistent',
+      confidence: 1.0,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const partial = await adapter.deleteSessionData('sess-erase-target');
+    expect(partial.deletedTraces).toBe(1);
+    expect(partial.deletedFacts).toBe(1);
+    expect(await adapter.getTracesBySession('sess-erase-target')).toHaveLength(0);
+    expect(await adapter.getTracesBySession('sess-keep-intact')).toHaveLength(1);
+
+    const globalWipe = await adapter.deleteSessionData('*');
+    expect(globalWipe.deletedTraces).toBe(1);
+    expect(globalWipe.deletedFacts).toBe(1);
+    expect(await adapter.getTracesBySession('sess-keep-intact')).toHaveLength(0);
+    expect(await adapter.listFacts({})).toHaveLength(0);
+  });
 });
 
 

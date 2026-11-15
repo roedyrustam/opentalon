@@ -3,6 +3,7 @@ export type { EpisodicTrace, ProceduralSkill, SemanticFact } from '@opentalon/me
 import { type ISkillSandbox, type SkillSynthesizer } from '@opentalon/skill-engine';
 import { type ContextCacheManager } from './drivers/context-cache-manager.js';
 import { type FinOpsBudgetTracker } from './token/finops-tracker.js';
+import { type PromptInjectionFirewall, type FirewallScanResult } from './security/prompt-firewall.js';
 
 export interface MultimodalAttachment {
   mimeType: string; // e.g. 'image/png', 'image/jpeg', 'application/pdf', 'audio/mp3'
@@ -147,6 +148,7 @@ export interface FastPathResult {
   tokensSaved?: number;
   estimatedCostUsd?: number;
   estimatedSavingsUsd?: number;
+  securityScan?: FirewallScanResult;
 }
 
 export interface RouterConfig {
@@ -156,6 +158,7 @@ export interface RouterConfig {
   synthesizer?: SkillSynthesizer;
   cacheManager?: ContextCacheManager;
   finopsTracker?: FinOpsBudgetTracker;
+  firewall?: PromptInjectionFirewall;
   maxFastPathTokens?: number; // Default 1500
   enableAsyncEvolution?: boolean; // Default true
   evolutionDebounceMs?: number; // In-memory debounce buffer window (Default 5000ms)

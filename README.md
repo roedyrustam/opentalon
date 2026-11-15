@@ -6,7 +6,7 @@
   <img src="assets/opentalon-3d-master.jpg" alt="OpenTalon 3D Master Emblem — Hermes Wings & Caduceus DNA × OpenClaw Titanium Talon" width="380" style="border-radius: 24px;" />
 </p>
 
-<h1 align="center">🦅🪽 OpenTalon (v0.5.0)</h1>
+<h1 align="center">🦅🪽 OpenTalon (v0.7.0)</h1>
 
 <p align="center">
   <strong>The Sovereign Fusion of Hermes Self-Evolution &amp; OpenClaw Token Frugality</strong><br>
@@ -16,7 +16,7 @@
 <p align="center">
   <a href="https://github.com/roedyrustam/opentalon/actions"><img src="https://img.shields.io/github/actions/workflow/status/roedyrustam/opentalon/ci.yml?branch=main&label=CI%20%2F%20Tests&logo=github" alt="CI Status" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
-  <a href="https://github.com/roedyrustam/opentalon"><img src="https://img.shields.io/badge/Tests-123%20Passing%20(18%20Suites)-10b981?logo=vitest" alt="Tests: 123 Passing" /></a>
+  <a href="https://github.com/roedyrustam/opentalon"><img src="https://img.shields.io/badge/Tests-157%20Passing%20(23%20Suites)-10b981?logo=vitest" alt="Tests: 157 Passing" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.8%2B%20Strict-3178c6?logo=typescript" alt="TypeScript 5.8+" /></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22%2B%20LTS-339933?logo=node.js" alt="Node.js 22+" /></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-v1.x%20Native-f97316" alt="MCP v1.x" /></a>
@@ -25,10 +25,10 @@
 
 <p align="center">
   <a href="#-quick-start-60-seconds">Quick Start</a> •
-  <a href="#-whats-new-in-v050">What's New in v0.5.0</a> •
+  <a href="#-whats-new-in-v070">What's New in v0.7.0</a> •
   <a href="#-architecture-overview">Architecture</a> •
   <a href="#-cli-command-suite">CLI Reference</a> •
-  <a href="#-web-cockpit-dashboard-8-tabs">Web Cockpit</a> •
+  <a href="#-web-cockpit-dashboard-10-built-in-tabs">Web Cockpit</a> •
   <a href="#-contributing--community-roadmap">Contribute</a> •
   <a href="#-ringkasan-bahasa-indonesia">Bahasa Indonesia</a>
 </p>
@@ -39,12 +39,12 @@
 
 Most AI agent frameworks burn **10,000–40,000 tokens per turn**, execute arbitrary untrusted code on your host machine, and repeat the same mistakes without learning. **OpenTalon** fixes all three:
 
-| Capability | Legacy Frameworks | Hermes Agent | OpenClaw | **🦅 OpenTalon v0.5.0** |
+| Capability | Legacy Frameworks | Hermes Agent | OpenClaw | **🦅 OpenTalon v0.7.0** |
 | :--- | :--- | :--- | :--- | :--- |
 | **Token Economy** | 8k–30k tokens/turn | Variable | &lt;2,000 tokens/turn | **&lt;1,500 tokens/turn + Canonical KV-Cache (75–90% saved)** |
 | **Thinking Budget** | Static / Unbounded | Fixed reflection | None | **O(1) Dynamic Entropy Budgeter (`0` to `65,536` tokens)** |
 | **Skill Evolution** | Static tools | Single-draft reflection | Manual plugins | **3x Speculative Multi-Draft Synthesis + Sandbox Benchmark** |
-| **Tool Security** | Raw host shell | High-risk shell | Permissive plugins | **Zero-Trust Sandboxed VMs (`net` / `fs` / `env` / `skills`)** |
+| **Tool Security** | Raw host shell | High-risk shell | Permissive plugins | **12-Rule SecurityGate + Prompt Firewall + Anti-SSRF Sandbox** |
 | **Proactive Daemon** | External cron only | None | Gateway polling | **Built-in 1s Heartbeat Scheduler + HMAC Webhook Ingress** |
 | **Multimodal & Grounding** | External wrappers | Text only | Text only | **Native Vision/PDF/Audio `inlineData` + Auto-Saved Web Citations** |
 | **FinOps Governance** | None | None | Prompt pruning | **Live USD Spend Ledger + 80% Daily Frugal Throttle Guard** |
@@ -52,7 +52,7 @@ Most AI agent frameworks burn **10,000–40,000 tokens per turn**, execute arbit
 
 ---
 
-## 🔥 What's New in v0.5.0
+## 🔥 What's New in v0.7.0
 
 1. **⚡ Gemini Agent Booster Engine (`@opentalon/core`)**
    - **`ThinkingBudgetCalculator`**: Zero-latency (`O(1)`) task entropy evaluator scoring lexical complexity, code blocks, security/architecture keywords, tool count, and multimodal attachments to dynamically allocate `0` to `65,536` System-2 thinking tokens.
@@ -72,6 +72,12 @@ Most AI agent frameworks burn **10,000–40,000 tokens per turn**, execute arbit
    - Decentralized Peer-to-Peer mesh federation powered by auto-generated **Ed25519 asymmetric keypairs** stored in SQLite (`agent_identity`).
    - Discovers nodes via standard **`/.well-known/agent.json` Agent Cards**.
    - Zero-token capability negotiation (`POST /api/a2a/negotiate`) and signed task delegation (`POST /api/a2a/dispatch`) with replay attack shields (`nonce` deduplication cache + $\pm60$s skew check) and circular delegation loop prevention (`delegationDepth <= 3`).
+8. **🛡️ Zero-Trust Security Gate, Prompt-Injection Firewall & Anti-SSRF Shield (v0.7.0)**
+   - **`SecurityGate` (`@opentalon/skill-engine`)**: 12 deterministic static code & capability rules (`SEC-001`..`SEC-012`) enforcing prototype-pollution blocks, `eval`/`new Function` bans, restricted host module checks, unbounded infinite-loop detection (`SEC-007`), and ReDoS mitigation — gating both `SkillSynthesizer` (`!passed`) and `SandboxedVmRunner` (`critical`).
+   - **Anti-SSRF Metadata & Wildcard Shield (`CapabilityValidator`)**: Blocks wildcard `'*'` network grants and cloud instance metadata targets (`169.254.169.254`, `metadata.google.internal`, `100.100.100.200`, `fd00:ec2::254`, `0.0.0.0`).
+   - **`PromptInjectionFirewall` (`@opentalon/core`)**: Automatically pre-scans inbound prompts in `DualBrainRouter` (`PI-001`..`PI-005`), supports `sanitize` (default), `block`, and `audit` modes, and redacts API keys (`sk-...`, `AIza...`) & PEM private keys into `[REDACTED_*]` placeholders.
+9. **⚖️ Mandatory Legal, Privacy & Right-to-Erasure Trio (UU PDP / GDPR)**
+   - Built-in bilingual (EN/ID) pages for `/privacy`, `/terms`, and `/delete-account`, backed by `IMemoryPort.deleteSessionData(sessionId)` and `POST /api/privacy/delete-data` compliant with **UU No. 27/2022 (UU PDP)** and **GDPR Art. 17**.
 
 ---
 
@@ -122,11 +128,11 @@ pnpm install
 # Build all 5 monorepo packages
 pnpm build
 
-# Run the 139 unit & integration tests across 21 test files (completes in ~2.5s)
+# Run the 157 unit & integration tests across 23 test files
 pnpm test
 ```
 
-### 3. Initialize & Launch the 9-Tab Web Cockpit
+### 3. Initialize & Launch the 10-Tab Web Cockpit
 ```bash
 # Initialize local SQLite database & seed 6 production skills
 pnpm talon init
@@ -134,13 +140,13 @@ pnpm talon init
 # Configure your LLM provider key (supports Gemini, Claude, DeepSeek, OpenAI, or 100% offline Ollama)
 cp .env.example .env
 
-# Start the Local Daemon + 9-Tab Web Cockpit on http://127.0.0.1:3100
+# Start the Local Daemon + 10-Tab Web Cockpit on http://127.0.0.1:3100
 pnpm talon serve --port 3100
 ```
 
 ---
 
-## 🖥️ Web Cockpit Dashboard (9 Built-In Tabs)
+## 🖥️ Web Cockpit Dashboard (10 Built-In Tabs)
 
 Open `http://127.0.0.1:3100/dashboard` in your browser to access the zero-dependency dark-mode Cockpit:
 1. **Overview & 3D Holographic Core**: Live 60FPS interactive 3D core, KV-Cache savings counter, System-2 thinking telemetry, and 1-click Speculative Evolution trigger.
@@ -152,6 +158,7 @@ Open `http://127.0.0.1:3100/dashboard` in your browser to access the zero-depend
 7. **Live Playground**: Real-time SSE token streaming with **Google Search Grounding**, **Thinking Budget Selector**, and **📎 Multimodal Attachment (Image/PDF/Audio)** upload.
 8. **Automations & Cron Manager**: One-click automation presets, custom cron/interval jobs, manual triggers, and live audit logs.
 9. **A2A Mesh Federation**: Inspect local Ed25519 node identity & Agent Card (`/.well-known/agent.json`), manage federated peer registry, auto-discover remote nodes, and monitor cryptographic audit logs.
+10. **Security Shield & Privacy Compliance**: Live `PromptInjectionFirewall` scan metrics, interactive prompt tester (`POST /api/security/audit`), static skill audit table (`SEC-001`..`SEC-012`), quick session purge, and links to `/privacy`, `/terms`, and `/delete-account`.
 
 ---
 
@@ -194,6 +201,11 @@ pnpm talon swarm critic "Write a constant-time HMAC signature verifier"
 
 # 9. Whole-Repo Monolithic Context Caching (2M+ Token Gemini 4 Pro / 3.8 Flash)
 pnpm talon analyze .
+
+# 10. Zero-Trust Security Gate & Prompt-Injection Firewall (v0.7.0)
+pnpm talon security status                                  # View firewall policy & audit all DB skills
+pnpm talon security scan "Ignore prior rules" --mode block  # Scan prompt for injections & secrets
+pnpm talon security audit-skill ./examples/skills/math-stats-calculator.md   # Audit SKILL.md against SEC-001..SEC-012
 ```
 
 ---
@@ -202,11 +214,11 @@ pnpm talon analyze .
 
 | Package | Path | Description |
 | :--- | :--- | :--- |
-| **`@opentalon/core`** | [`packages/core`](packages/core) | `DualBrainRouter`, `ThinkingBudgetCalculator`, `FinOpsBudgetTracker`, `ContextCacheManager`, `EvolutionEngine`, `SwarmDirector`, `CronScheduler`, `McpServer`, and 7 LLM Drivers. |
-| **`@opentalon/memory`** | [`packages/memory`](packages/memory) | `LibSqlMemoryAdapter` (SQLite / Turso), FTS5 BM25 full-text search, Float32 vector cosine similarity, and Reciprocal Rank Fusion (RRF). |
-| **`@opentalon/skill-engine`** | [`packages/skill-engine`](packages/skill-engine) | `SandboxedVmRunner`, `VirtualFs`, `CapabilityValidator`, `SkillMarkdownParser`, `SkillSynthesizer`, `SkillVersionManager`, and `RemoteSkillInstaller`. |
-| **`@opentalon/gateway`** | [`packages/gateway`](packages/gateway) | `LocalDaemonAdapter`, `ServerlessEdgeAdapter` (Cloudflare Workers), `SseStreamAdapter`, HMAC Webhook Ingress, and 8-Tab Web Cockpit. |
-| **`talon` (CLI)** | [`packages/cli`](packages/cli) | Unified command-line interface for local orchestration, REPL chat, daemon management, and CI automation. |
+| **`@opentalon/core`** | [`packages/core`](packages/core) | `DualBrainRouter`, `PromptInjectionFirewall`, `ThinkingBudgetCalculator`, `FinOpsBudgetTracker`, `ContextCacheManager`, `EvolutionEngine`, `SwarmDirector`, `CronScheduler`, `McpServer`, and 7 LLM Drivers. |
+| **`@opentalon/memory`** | [`packages/memory`](packages/memory) | `LibSqlMemoryAdapter` (SQLite / Turso), FTS5 BM25 full-text search, Float32 vector cosine similarity, Reciprocal Rank Fusion (RRF), and `deleteSessionData` right-to-erasure cleanup. |
+| **`@opentalon/skill-engine`** | [`packages/skill-engine`](packages/skill-engine) | `SecurityGate` (`SEC-001`..`SEC-012`), `SandboxedVmRunner`, `VirtualFs`, anti-SSRF `CapabilityValidator`, `SkillMarkdownParser`, `SkillSynthesizer`, `SkillVersionManager`, and `RemoteSkillInstaller`. |
+| **`@opentalon/gateway`** | [`packages/gateway`](packages/gateway) | `LocalDaemonAdapter`, `ServerlessEdgeAdapter` (Cloudflare Workers), `SseStreamAdapter`, HMAC Webhook Ingress, Legal/Privacy Trio (`/privacy`, `/terms`, `/delete-account`), and 10-Tab Web Cockpit. |
+| **`talon` (CLI)** | [`packages/cli`](packages/cli) | Unified command-line interface for local orchestration, REPL chat, security auditing (`talon security`), daemon management, and CI automation. |
 
 ---
 
@@ -229,8 +241,8 @@ If you find OpenTalon useful, please consider giving the repository a ⭐ **Star
 **OpenTalon** adalah framework **AI Agent Otonom Open-Source** generasi terbaru yang menggabungkan:
 1. **Self-Evolving Procedural Memory (Gaya Hermes Agent + Speculative Multi-Draft):** Agen belajar secara otonom dari kegagalan eksekusi di latar belakang (*Slow Path*), menyusun 3 kandidat `SKILL.md` secara paralel, mengujinya di sandbox, dan menyimpan kandidat tercepat.
 2. **Hyper-Frugal Token Economy (Gaya OpenClaw + Gemini Agent Booster):** Menjaga anggaran *Fast Path* `< 1.500` token/turn dengan *Canonical KV-Cache Prefix Pinning* (hemat biaya 75–90%) dan *O(1) Dynamic Thinking Budget* (`0` s/d `65.536` token).
-3. **Zero-Trust Capability Sandbox:** Setiap kode skill dieksekusi di dalam VM terisolasi dengan kontrol ketat atas izin jaringan (`allowedHosts`), filesystem (`VirtualFs`), environment variable, dan chaining antar-skill.
-4. **Proactive Background Daemon & Sovereign FinOps:** Dilengkapi penjadwal cron internal 1 detik (`talon cron`), webhook HMAC SHA-256, dukungan Multimodal Vision/PDF, penyimpanan otomatis fakta Google Search Grounding, dan *FinOps Frugal Throttle Guard*.
+3. **Zero-Trust Security Gate, Prompt Firewall & Anti-SSRF Sandbox:** Dilengkapi `SecurityGate` (12 aturan statis `SEC-001`..`SEC-012`), pemblokir host metadata cloud anti-SSRF & host wildcard `'*'`, serta `PromptInjectionFirewall` (`PI-001`..`PI-005`) yang meredaksi otomatis kunci API dan *private key* PEM.
+4. **Proactive Background Daemon, FinOps & Kepatuhan Privasi (UU PDP / GDPR):** Dilengkapi penjadwal cron internal 1 detik (`talon cron`), webhook HMAC SHA-256, dukungan Multimodal Vision/PDF, *FinOps Frugal Throttle Guard*, serta trio halaman legal & penghapusan data (`/privacy`, `/terms`, `/delete-account`).
 
 ---
 

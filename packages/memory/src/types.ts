@@ -168,6 +168,9 @@ export interface IMemoryPort {
   exportSnapshot(options?: { includeTraces?: boolean }): Promise<MemorySnapshot>;
   importSnapshot(snapshot: MemorySnapshot, options?: { overwrite?: boolean }): Promise<ImportSnapshotResult>;
 
+  // Privacy & Right-to-Erasure (GDPR Art. 17 / UU PDP No. 27/2022)
+  deleteSessionData(sessionId: string): Promise<{ deletedTraces: number; deletedFacts: number }>;
+
   // A2A Protocol & Mesh Federation
   getAgentIdentity(): Promise<AgentIdentity | null>;
   saveAgentIdentity(identity: AgentIdentity): Promise<void>;

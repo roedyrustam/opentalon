@@ -1247,6 +1247,50 @@ export class LibSqlMemoryAdapter implements IMemoryPort {
     });
   }
 
+  public async deleteSessionData(
+    sessionId: string
+  ): Promise<{ deletedTraces: number; deletedFacts: number }> {
+    await this.initialize();
+
+    if (sessionId === '*') {
+      const traceRes = await this.client.execute(`DELETE FROM episodic_traces;`);
+      try {
+        await this.client.execute(`DELETE FROM fts_facts;`);
+      } catch {
+        // Ignore if FTS5 unavailable
+      }
+      const factRes = await this.client.execute(`DELETE FROM semantic_facts;`);
+      return {
+        deletedTraces: Number(traceRes.rowsAffected ?? 0),
+        deletedFacts: Number(factRes.rowsAffected ?? 0),
+      };
+    }
+
+    const traceRes = await this.client.execute({
+      sql: `DELETE FROM episodic_traces WHERE session_id = ?;`,
+      args: [sessionId],
+    });
+
+    try {
+      await this.client.execute({
+        sql: `DELETE FROM fts_facts WHERE id IN (SELECT id FROM semantic_facts WHERE session_id = ?);`,
+        args: [sessionId],
+      });
+    } catch {
+      // Ignore if FTS5 unavailable
+    }
+
+    const factRes = await this.client.execute({
+      sql: `DELETE FROM semantic_facts WHERE session_id = ?;`,
+      args: [sessionId],
+    });
+
+    return {
+      deletedTraces: Number(traceRes.rowsAffected ?? 0),
+      deletedFacts: Number(factRes.rowsAffected ?? 0),
+    };
+  }
+
   private mapPeerRow(row: Record<string, unknown>): FederatedPeer {
     let capabilities: string[] = [];
     try {

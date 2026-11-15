@@ -338,6 +338,7 @@ export function getDashboardHtml(): string {
       <button class="tab-btn" onclick="switchTab('chat')">Live Playground</button>
       <button class="tab-btn" onclick="switchTab('automations')">Automations & Cron</button>
       <button class="tab-btn" onclick="switchTab('a2a')">A2A Mesh</button>
+      <button class="tab-btn" onclick="switchTab('security')">Security Shield</button>
     </nav>
   </header>
 
@@ -1022,7 +1023,112 @@ export function getDashboardHtml(): string {
         </table>
       </div>
     </section>
+
+    <!-- TAB 10: ZERO-TRUST SECURITY SHIELD & PRIVACY COMPLIANCE -->
+    <section id="security" class="tab-content">
+      <div class="stats-grid" style="margin-bottom: 1.5rem;">
+        <div class="stat-card">
+          <div class="stat-label">Prompts Scanned</div>
+          <div class="stat-value tabular-nums" id="sec-stat-scans">0</div>
+          <div class="stat-desc" id="sec-stat-mode">Firewall Mode: sanitize</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Injection Threats</div>
+          <div class="stat-value tabular-nums" id="sec-stat-threats">0</div>
+          <div class="stat-desc">PI-001 to PI-005 heuristics</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Secrets Redacted</div>
+          <div class="stat-value tabular-nums" id="sec-stat-secrets">0</div>
+          <div class="stat-desc">API keys &amp; PEM credentials scrubbed</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Verified Skills Pass</div>
+          <div class="stat-value tabular-nums" id="sec-stat-skills-pass">--</div>
+          <div class="stat-desc">SEC-001 to SEC-012 static gate</div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+        <div class="card" style="margin-bottom: 0;">
+          <div class="card-title">
+            <span>Prompt-Injection &amp; Secret Firewall Tester</span>
+            <button class="btn" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="loadSecurityReport()">Refresh Telemetry</button>
+          </div>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+            Test incoming user prompts against <code>PromptInjectionFirewall</code> (<code>PI-001</code>..<code>PI-005</code>) and automatic secret redaction before execution.
+          </p>
+          <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <textarea id="security-test-input" class="chat-input" rows="4" placeholder="Paste prompt payload to test injection / secret detection..." style="width: 100%; resize: vertical;"></textarea>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <select id="security-test-mode" class="chat-input" style="padding: 0.45rem 0.75rem;">
+                <option value="sanitize">Mode: sanitize</option>
+                <option value="block">Mode: block</option>
+                <option value="audit">Mode: audit</option>
+              </select>
+              <button class="btn" onclick="runSecurityPromptScan()">Run Firewall Scan</button>
+            </div>
+            <div id="security-scan-result" style="font-family: var(--font-mono); font-size: 0.8rem; background: #0d131f; border: 1px solid var(--card-border); border-radius: 8px; padding: 0.75rem; color: var(--text-muted);">
+              Ready to scan prompt payloads.
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 0;">
+          <div class="card-title">
+            <span>Legal, Privacy &amp; Right-to-Erasure (UU PDP / GDPR)</span>
+            <span class="badge badge-success">Compliant</span>
+          </div>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.85rem;">
+            OpenTalon provides mandatory legal transparency documents and self-service data erasure endpoints under UU No. 27/2022 (UU PDP) and GDPR Art. 17.
+          </p>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem;">
+            <a href="/privacy" target="_blank" class="badge badge-blue" style="text-decoration: none; padding: 0.4rem 0.75rem;">Privacy Policy (/privacy)</a>
+            <a href="/terms" target="_blank" class="badge badge-blue" style="text-decoration: none; padding: 0.4rem 0.75rem;">Terms &amp; Conditions (/terms)</a>
+            <a href="/delete-account" target="_blank" class="badge badge-purple" style="text-decoration: none; padding: 0.4rem 0.75rem;">Data Deletion Portal (/delete-account)</a>
+          </div>
+          <div style="border-top: 1px solid var(--card-border); padding-top: 0.85rem;">
+            <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 0.35rem;">Quick Session Data Purge (leave blank or <code>*</code> for global purge)</label>
+            <div style="display: flex; gap: 0.5rem;">
+              <input type="text" id="privacy-purge-session-id" class="chat-input" placeholder="sessionId (or * for all)" style="flex: 1; padding: 0.45rem 0.75rem;" />
+              <button class="btn" style="background: #b91c1c;" onclick="purgeSessionDataFromUi()">Purge Data</button>
+            </div>
+            <div id="privacy-purge-status" style="font-size: 0.8rem; margin-top: 0.5rem; color: var(--text-muted);"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>Procedural Skills Static Security Audit (SEC-001 .. SEC-012)</span>
+          <span style="font-size: 0.8rem; color: var(--text-muted);">SSRF, Prototype Pollution, Eval &amp; Host Wildcard Gate</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Skill</th>
+              <th>Version</th>
+              <th>Score</th>
+              <th>Status</th>
+              <th>Violations</th>
+            </tr>
+          </thead>
+          <tbody id="security-skills-table-body">
+            <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1rem;">Open Security Shield tab or click Refresh Telemetry to inspect registered skills.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </main>
+
+  <footer style="max-width: 1400px; margin: 0 auto 2rem; padding: 1rem 2rem; border-top: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; font-size: 0.8rem; color: var(--text-muted);">
+    <span>OpenTalon Dual-Brain Autonomous Agent Runtime — Zero-Trust Security Shield</span>
+    <span style="display: flex; gap: 1rem;">
+      <a href="/privacy" style="color: #60a5fa; text-decoration: none;">Privacy Policy</a>
+      <a href="/terms" style="color: #60a5fa; text-decoration: none;">Terms &amp; Conditions</a>
+      <a href="/delete-account" style="color: #f87171; text-decoration: none;">Delete User Data</a>
+    </span>
+  </footer>
 
   <script>
     let activeTestSkillName = '';
@@ -1043,6 +1149,7 @@ export function getDashboardHtml(): string {
       if (tabId === 'facts') loadFacts();
       if (tabId === 'automations') loadAutomations();
       if (tabId === 'a2a') loadA2AMesh();
+      if (tabId === 'security') loadSecurityReport();
     }
 
     async function loadStats() {
@@ -2499,6 +2606,122 @@ export function getDashboardHtml(): string {
         }).join('');
       } catch (e) {
         tbody.innerHTML = '<tr><td colspan="7" style="color: #ef4444; text-align: center;">Error loading A2A logs: ' + e.message + '</td></tr>';
+      }
+    }
+
+    function escapeSecHtml(str) {
+      return String(str)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;');
+    }
+
+    async function loadSecurityReport() {
+      const tbody = document.getElementById('security-skills-table-body');
+      try {
+        const res = await fetch('/api/security/report');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        const fw = data.firewall || {};
+        document.getElementById('sec-stat-scans').textContent = String(fw.totalScanned || 0);
+        document.getElementById('sec-stat-mode').textContent = 'Firewall Mode: ' + (fw.mode || 'sanitize');
+        document.getElementById('sec-stat-threats').textContent = String(fw.threatsDetected || 0);
+        document.getElementById('sec-stat-secrets').textContent = String(fw.secretsRedactedCount || 0);
+
+        const skillsAudit = Array.isArray(data.skillsAudit) ? data.skillsAudit : [];
+        const passedCount = skillsAudit.filter(function(s) { return s.passed; }).length;
+        document.getElementById('sec-stat-skills-pass').textContent = passedCount + ' / ' + skillsAudit.length;
+
+        if (!tbody) return;
+        if (skillsAudit.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 1rem;">No procedural skills registered yet.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = skillsAudit.map(function(s) {
+          const badge = s.passed
+            ? '<span class="badge badge-success">PASS</span>'
+            : '<span class="badge" style="background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3);">BLOCKED</span>';
+          const vText = (s.violations && s.violations.length > 0)
+            ? s.violations.map(function(v) { return escapeSecHtml(v.ruleId + ' (' + v.severity + '): ' + v.description); }).join(' | ')
+            : '<span style="color: var(--text-muted);">None</span>';
+          return '<tr>' +
+            '<td><strong>' + escapeSecHtml(s.name) + '</strong></td>' +
+            '<td><code>v' + escapeSecHtml(s.version) + '</code></td>' +
+            '<td class="tabular-nums">' + String(s.score) + '/100</td>' +
+            '<td>' + badge + '</td>' +
+            '<td style="font-size: 0.8rem;">' + vText + '</td>' +
+            '</tr>';
+        }).join('');
+      } catch (e) {
+        if (tbody) {
+          tbody.innerHTML = '<tr><td colspan="5" style="color: #ef4444; text-align: center;">Error loading security report: ' + escapeSecHtml(e.message) + '</td></tr>';
+        }
+      }
+    }
+
+    async function runSecurityPromptScan() {
+      const inputEl = document.getElementById('security-test-input');
+      const modeEl = document.getElementById('security-test-mode');
+      const outEl = document.getElementById('security-scan-result');
+      const prompt = inputEl ? inputEl.value : '';
+      const mode = modeEl ? modeEl.value : 'sanitize';
+      if (!prompt.trim()) {
+        if (outEl) outEl.textContent = 'Enter a prompt payload first.';
+        return;
+      }
+      if (outEl) outEl.textContent = 'Scanning payload...';
+      try {
+        const res = await fetch('/api/security/audit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: prompt, mode: mode })
+        });
+        const data = await res.json();
+        const scan = data.promptScan;
+        if (!scan) {
+          outEl.textContent = 'No scan result returned.';
+          return;
+        }
+        const threatList = (scan.threats || []).map(function(t) {
+          return '[' + escapeSecHtml(t.ruleId) + ' ' + escapeSecHtml(t.severity) + '] ' + escapeSecHtml(t.description);
+        }).join('<br>');
+        outEl.innerHTML =
+          '<div><strong>Action:</strong> ' + escapeSecHtml(scan.action) +
+          ' | <strong>Safe:</strong> ' + String(scan.safe) +
+          ' | <strong>Risk Score:</strong> ' + String(scan.riskScore) +
+          ' | <strong>Secrets Redacted:</strong> ' + String(scan.secretsRedacted) + '</div>' +
+          (threatList ? '<div style="margin-top: 0.4rem; color: #f87171;">' + threatList + '</div>' : '') +
+          '<div style="margin-top: 0.4rem; color: #cbd5e1;"><strong>Sanitized Output:</strong> ' + escapeSecHtml(scan.sanitizedText) + '</div>';
+        loadSecurityReport();
+      } catch (e) {
+        if (outEl) outEl.textContent = 'Scan error: ' + e.message;
+      }
+    }
+
+    async function purgeSessionDataFromUi() {
+      const inputEl = document.getElementById('privacy-purge-session-id');
+      const statusEl = document.getElementById('privacy-purge-status');
+      const rawSession = inputEl && inputEl.value.trim() ? inputEl.value.trim() : '*';
+      if (statusEl) statusEl.textContent = 'Purging session data for "' + rawSession + '"...';
+      try {
+        const res = await fetch('/api/privacy/delete-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: rawSession })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+        if (statusEl) {
+          statusEl.style.color = '#34d399';
+          statusEl.textContent = 'Deleted ' + data.deletedTraces + ' trace(s) and ' + data.deletedFacts + ' fact(s) for session "' + data.sessionId + '".';
+        }
+        loadStats();
+      } catch (e) {
+        if (statusEl) {
+          statusEl.style.color = '#ef4444';
+          statusEl.textContent = 'Purge failed: ' + e.message;
+        }
       }
     }
 

@@ -188,3 +188,8 @@ When a skill fails validation during Slow Path reflection or test execution:
 3. The `fts_skills` index retains the previous valid descriptor.
 4. An error trace is logged into `episodic_traces` with `success = 0`.
 
+### 4.3 Right-to-Erasure Session Purge (`deleteSessionData` — v0.7.0)
+To comply with **UU PDP No. 27/2022** and **GDPR Art. 17**, `LibSqlMemoryAdapter.deleteSessionData(sessionId)` executes an atomic erasure workflow:
+1. If `sessionId === '*'`, deletes all rows from `episodic_traces`, clears `fts_facts`, and deletes all rows from `semantic_facts`.
+2. Otherwise, deletes matching rows by `session_id` across `episodic_traces`, removes corresponding entries from `fts_facts`, and deletes matching rows from `semantic_facts`, returning `{ deletedTraces, deletedFacts }`.
+

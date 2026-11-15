@@ -5,6 +5,7 @@ import {
   type SandboxExecutionResult,
 } from '../types.js';
 import { CapabilityValidator } from './capability-validator.js';
+import { SecurityGate } from './security-gate.js';
 import { VirtualFs } from './virtual-fs.js';
 
 export class SandboxedVmRunner implements ISkillSandbox {
@@ -14,6 +15,20 @@ export class SandboxedVmRunner implements ISkillSandbox {
     const timeoutMs = options.timeoutMs ?? 5000;
 
     try {
+      // Pre-execution Zero-Trust Security Gate (blocks critical violations immediately)
+      const audit = SecurityGate.auditSkillCode(options.code, options.capabilities);
+      const criticalViolations = audit.violations.filter((v) => v.severity === 'critical');
+      if (criticalViolations.length > 0) {
+        return {
+          success: false,
+          error: `[SecurityGate] Blocked critical security violation: ${criticalViolations
+            .map((v) => `${v.ruleId} (${v.title})`)
+            .join(', ')}`,
+          logs,
+          durationMs: Date.now() - startTime,
+        };
+      }
+
       // Sandboxed virtualized console
       const virtualConsole = {
         log: (...args: unknown[]) => logs.push(args.map((a) => String(a)).join(' ')),

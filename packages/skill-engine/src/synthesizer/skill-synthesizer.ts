@@ -4,6 +4,7 @@ import {
   type ISkillSandbox,
 } from '../types.js';
 import { SandboxedVmRunner } from '../sandbox/quickjs-sandbox.js';
+import { SecurityGate } from '../sandbox/security-gate.js';
 import { SkillMarkdownParser } from '../parser/skill-markdown.js';
 import { SkillVersionManager } from '../versioning/skill-version-manager.js';
 
@@ -48,6 +49,18 @@ export class SkillSynthesizer {
     candidate: SynthesisCandidate,
     baseVersion = '1.0.0'
   ): Promise<SynthesisResult> {
+    // 0. Static Zero-Trust Security Gate audit before executing candidate in sandbox
+    const audit = SecurityGate.auditSkillCode(candidate.code, candidate.capabilities);
+    if (!audit.passed) {
+      return {
+        success: false,
+        error: `[SecurityGate] Skill failed static security audit (score ${audit.score}/100): ${audit.violations
+          .map((v) => `${v.ruleId}: ${v.title}`)
+          .join('; ')}`,
+        version: baseVersion,
+      };
+    }
+
     const defaultDryRunCallSkill =
       this.callSkillResolver ??
       (async (targetSkillName, targetArgs) => ({

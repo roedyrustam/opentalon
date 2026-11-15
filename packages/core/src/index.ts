@@ -22,3 +22,4 @@ export * from './swarm/swarm-director.js';
 export * from './scheduler/index.js';
 export * from './a2a/types.js';
 export * from './a2a/identity-manager.js';
+export * from './security/prompt-firewall.js';

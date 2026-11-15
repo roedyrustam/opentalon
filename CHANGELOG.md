@@ -2,6 +2,16 @@
 
 All notable changes to the **OpenTalon** project are documented in this file.
 
+## [0.7.0] - 2026-11-15 — Zero-Trust Security Gate, Prompt-Injection Firewall & Anti-SSRF Sandbox Shield
+
+### Added
+- **Static Skill Security Gate (`SecurityGate` in `@opentalon/skill-engine`)**: 12 deterministic rules (`SEC-001` through `SEC-012`) scanning code & capability declarations for prototype pollution (`SEC-001`), dynamic code evaluation `eval`/`Function` (`SEC-002`), host process/native escapes (`SEC-003`), cloud metadata SSRF (`SEC-004`), wildcard hosts (`SEC-005`), FS path traversal (`SEC-006`), unbounded infinite loops `while(true)`/`for(;;)` (`SEC-007`), master secret env grants (`SEC-008`), unsafe raw `Buffer` allocation (`SEC-009`), wildcard/deep skill chaining (`SEC-010`), hardcoded secrets (`SEC-011`), and ReDoS regex literals (`SEC-012`).
+- **Pre-Execution & Synthesis Security Enforcement**: `SandboxedVmRunner.execute()` pre-blocks critical violations (`SEC-001`..`SEC-004`) before VM launch, while `SkillSynthesizer.synthesize()` rejects any `!audit.passed` candidate (including high-severity `SEC-007`).
+- **Anti-SSRF Metadata & Wildcard Host Shield (`CapabilityValidator`)**: Added `isCloudMetadataOrForbiddenHost()` and blocked wildcard `'*'` network grants plus cloud instance metadata targets (`169.254.169.254`, `metadata.google.internal`, `metadata.goog`, `100.100.100.200`, `fd00:ec2::254`, `0.0.0.0`).
+- **Runtime Prompt-Injection Firewall (`PromptInjectionFirewall` in `@opentalon/core`)**: Pre-scans inbound Fast Path prompts against rules `PI-001`..`PI-005` (`system_override`, `jailbreak_persona`, `delimiter_spoofing`, `indirect_injection`, `secret_exfiltration`), automatically redacts `sk-...`, `AIza...`, and PEM private keys (`[REDACTED_*]`), supports `sanitize` (default), `block`, and `audit` modes, and records bounded 200-event security telemetry (`DualBrainRouter.getFirewall()`, `getBoosterStats().security`, `FastPathResult.securityScan`).
+- **Mandatory Legal, Privacy & Right-to-Erasure Trio (`@opentalon/memory` + `@opentalon/gateway`)**: Added `IMemoryPort.deleteSessionData(sessionId)` (with `'*'` global wipe & FTS5 cleanup) in `LibSqlMemoryAdapter`, bilingual EN/ID HTML pages (`/privacy`, `/terms`, `/delete-account`), `POST /api/privacy/delete-data` (`UU-PDP-No-27-2022`, `GDPR-Art-17`), `GET /api/security/report`, `POST /api/security/audit`, and the **Security Shield** Web Cockpit tab (`#security`).
+- **CLI Security Suite (`packages/cli`)**: Added `talon security status`, `talon security scan <prompt>` (alias `scan-prompt`), and `talon security audit-skill <nameOrPath>`.
+
 ## [0.5.0] - 2026-10-23 — Sovereign FinOps & Gemini Agent Booster Complete Suite
 
 ### Added

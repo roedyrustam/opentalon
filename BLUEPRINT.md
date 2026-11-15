@@ -1,5 +1,5 @@
-# Blueprint: OpenTalon v0.6.0 — A2A Protocol & Peer-to-Peer Mesh Federation
-**OpenTalon Platform Evolution — A2A (Agent-to-Agent) & Multi-Daemon Federation Architecture**
+# Blueprint: OpenTalon v0.6.0 & v0.7.0 — A2A Protocol & Zero-Trust Security Shield
+**OpenTalon Platform Evolution — A2A Mesh Federation + Zero-Trust Security Gate, Prompt Firewall & Privacy Compliance**
 
 ---
 
@@ -154,3 +154,23 @@ export interface A2ADispatchResponse {
   - Add Federated Mesh tab to Web Cockpit with live node status pills and latency charts.
 - **Phase 8: Comprehensive Verification & Hardening**
   - Vitest test suites verifying full P2P handshake, signed payload verification, and remote execution.
+
+---
+
+## 6. v0.7.0 Security & Privacy Architecture Addendum
+
+### 6.1 Static Skill Security Gate (`SecurityGate`) & Anti-SSRF Shield (`@opentalon/skill-engine`)
+- **12 Static Rules (`SEC-001`..`SEC-012`)**: Audits procedural skill source code and capability manifests (`SkillSecurityAuditReport`) for prototype pollution (`__proto__`, `constructor.constructor`, `Object.setPrototypeOf`), dynamic evaluation (`eval`, `new Function`, string-arg timers), restricted host modules (`child_process`, `fs`, `net`, `os`, `cluster`, `worker_threads`, `vm`, `v8`), cloud metadata SSRF (`169.254.169.254`, `metadata.google.internal`, `100.100.100.200`, `fd00:ec2::254`, `0.0.0.0`), wildcard `'*'` network grants, path traversal (`/etc`, `/root`, `..`), unbounded infinite loops (`while(true)`/`for(;;)`), forbidden env keys, `Buffer.allocUnsafe`, excessive/wildcard chaining, hardcoded secrets, and ReDoS literals.
+- **Two-Stage Enforcement**:
+  - `SkillSynthesizer.synthesize()` blocks any candidate where `!audit.passed` (`critical` or `high`, including `SEC-007`).
+  - `SandboxedVmRunner.execute()` pre-blocks `severity === 'critical'` (`SEC-001`..`SEC-004`) prior to `node:vm` launch while preserving VM runtime timeout enforcement for non-critical constructs.
+- **Anti-SSRF Capability Shield**: `CapabilityValidator.isCloudMetadataOrForbiddenHost()` and `assertNetworkAllowed()` block wildcard `'*'` hosts and cloud metadata endpoints at runtime.
+
+### 6.2 Runtime Prompt-Injection Firewall (`@opentalon/core`)
+- **`PromptInjectionFirewall`**: Scans inbound Fast Path inputs against rules `PI-001`..`PI-005` (`system_override`, `jailbreak_persona`, `delimiter_spoofing`, `indirect_injection`, `secret_exfiltration`) and redacts leaked credentials (`sk-...`, `AIza...`, PEM private keys).
+- Wired directly into `DualBrainRouter.executeFastPath()` (default `mode: 'sanitize'`, `redactSecrets: true`), returning `FastPathResult.securityScan` and exposing telemetry via `router.getFirewall()` and `router.getBoosterStats().security`.
+
+### 6.3 Mandatory Legal, Privacy & Right-to-Erasure Trio (`@opentalon/memory` & `@opentalon/gateway`)
+- `IMemoryPort.deleteSessionData(sessionId)` purges session traces (`episodic_traces`), session facts (`semantic_facts`), and synchronized `fts_facts` entries (or global `'*'` wipe).
+- Bilingual EN/ID endpoints compliant with **UU PDP No. 27/2022** & **GDPR Art. 13/17**: `GET /privacy`, `GET /terms`, `GET /delete-account`, `POST /api/privacy/delete-data`, `GET /api/security/report`, `POST /api/security/audit`, and the Web Cockpit **Security Shield** tab (`#security`).
+- CLI audit tools: `talon security status`, `talon security scan <prompt>` (alias `scan-prompt`), and `talon security audit-skill <nameOrPath>`.

@@ -8,6 +8,24 @@ export class CapabilityViolationError extends Error {
 }
 
 export class CapabilityValidator {
+  private static readonly FORBIDDEN_HOSTS = new Set([
+    '169.254.169.254',
+    'metadata.google.internal',
+    'metadata.goog',
+    '100.100.100.200',
+    'fd00:ec2::254',
+    '[fd00:ec2::254]',
+    '0.0.0.0',
+  ]);
+
+  /**
+   * Returns true if the hostname points to a cloud instance metadata endpoint or forbidden SSRF target.
+   */
+  public static isCloudMetadataOrForbiddenHost(hostname: string): boolean {
+    const clean = hostname.toLowerCase().trim();
+    return this.FORBIDDEN_HOSTS.has(clean);
+  }
+
   /**
    * Asserts that a URL or hostname is permitted under the declared net capabilities.
    */
@@ -19,11 +37,26 @@ export class CapabilityValidator {
       );
     }
 
+    if (grant.allowedHosts.some((h) => h.trim() === '*')) {
+      throw new CapabilityViolationError(
+        'net',
+        'Wildcard "*" host grant is prohibited under Zero-Trust policy'
+      );
+    }
+
     let urlObj: URL;
     try {
       urlObj = new URL(targetUrl);
     } catch {
       throw new CapabilityViolationError('net', `Invalid URL format: "${targetUrl}"`);
+    }
+
+    const hostname = urlObj.hostname.toLowerCase();
+    if (this.isCloudMetadataOrForbiddenHost(hostname)) {
+      throw new CapabilityViolationError(
+        'net',
+        `SSRF Protection: Access to cloud metadata or forbidden host "${hostname}" is blocked`
+      );
     }
 
     if (urlObj.protocol === 'http:' && !grant.allowHttp) {
@@ -33,7 +66,6 @@ export class CapabilityValidator {
       );
     }
 
-    const hostname = urlObj.hostname.toLowerCase();
     const isAllowed = grant.allowedHosts.some((allowed) => {
       const cleanAllowed = allowed.toLowerCase().trim();
       return (

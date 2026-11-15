@@ -20,15 +20,23 @@ import {
   ContextCacheManager,
   ThinkingBudgetCalculator,
   AgentIdentityManager,
+  PromptInjectionFirewall,
   type ChatMessage,
   type ILLMPort,
   type CascadeProvider,
   type AgentCard,
   type A2ADispatchRequest,
   type A2ADispatchResponse,
+  type FirewallMode,
 } from '@opentalon/core';
 import { LibSqlMemoryAdapter, type FederatedPeer } from '@opentalon/memory';
-import { SandboxedVmRunner, RemoteSkillInstaller } from '@opentalon/skill-engine';
+import {
+  SandboxedVmRunner,
+  RemoteSkillInstaller,
+  SecurityGate,
+  SkillMarkdownParser,
+  type CapabilityGrant,
+} from '@opentalon/skill-engine';
 import { LocalDaemonAdapter } from '@opentalon/gateway';
 
 // Automatically discover and load .env from workspace or parent directories
@@ -68,7 +76,7 @@ const program = new Command();
 program
   .name('talon')
   .description('OpenTalon - Next-Generation AI Agent Framework CLI')
-  .version('0.1.0');
+  .version('0.7.0');
 
 function getComponents(dbPath = 'opentalon.db') {
   const memory = new LibSqlMemoryAdapter({
@@ -2140,6 +2148,139 @@ a2aCmd
       );
     } finally {
       await memory.close();
+    }
+  });
+
+const securityCommand = program
+  .command('security')
+  .description('Zero-Trust Security Gate, Prompt-Injection Firewall & Anti-SSRF audit tools');
+
+securityCommand
+  .command('status')
+  .description('Display firewall posture and audit all registered procedural skills')
+  .option('--db <path>', 'Path to OpenTalon SQLite database', 'opentalon.db')
+  .action(async (options: { db: string }) => {
+    const { memory } = getComponents(options.db);
+    await memory.initialize();
+    try {
+      const skills = await memory.listSkills();
+      console.log('\n\x1b[1m🛡️  OpenTalon Zero-Trust Security Shield Status\x1b[0m');
+      console.log('──────────────────────────────────────────────────────────');
+      console.log('  • Prompt Firewall Default : sanitize (PI-001 .. PI-005 + Secret Redaction)');
+      console.log('  • Sandbox Network Shield  : Anti-SSRF Metadata & Wildcard Host Block Active');
+      console.log('  • Static Skill Gate       : 12 Rules (SEC-001 .. SEC-012)');
+      console.log('  • Legal & Privacy Trio    : /privacy, /terms, /delete-account (UU PDP / GDPR)');
+      console.log(`  • Registered Skills Audit : ${skills.length} skill(s) checked\n`);
+
+      let blockedCount = 0;
+      for (const s of skills) {
+        const audit = SecurityGate.auditSkillCode(s.code, s.capabilities);
+        const badge = audit.passed ? '\x1b[32mPASS\x1b[0m' : '\x1b[31mFAIL\x1b[0m';
+        if (!audit.passed) blockedCount++;
+        console.log(`  [${badge}] ${s.name} (v${s.version}) — Score: ${audit.score}/100`);
+        for (const v of audit.violations) {
+          console.log(`         └─ ${v.ruleId} [${v.severity.toUpperCase()}]: ${v.description}`);
+        }
+      }
+      if (skills.length > 0) {
+        console.log(`\nSummary: ${skills.length - blockedCount}/${skills.length} skills passed static gate.\n`);
+      }
+    } finally {
+      await memory.close();
+    }
+  });
+
+securityCommand
+  .command('scan <prompt>')
+  .alias('scan-prompt')
+  .description('Scan a prompt payload for prompt injection (PI-001..PI-005) and sensitive secrets')
+  .option('-m, --mode <mode>', 'Firewall action mode (block | sanitize | audit)', 'sanitize')
+  .action((prompt: string, options: { mode: string }) => {
+    const mode = (['block', 'sanitize', 'audit'].includes(options.mode)
+      ? options.mode
+      : 'sanitize') as FirewallMode;
+    const firewall = new PromptInjectionFirewall({ mode, redactSecrets: true });
+    const result = firewall.scan(prompt);
+
+    console.log('\n\x1b[1m🔍 Prompt-Injection Firewall Scan Result\x1b[0m');
+    console.log('──────────────────────────────────────────────────────────');
+    console.log(`  Mode            : ${mode}`);
+    console.log(`  Safe            : ${result.safe ? '\x1b[32mYES\x1b[0m' : '\x1b[31mNO\x1b[0m'}`);
+    console.log(`  Action          : ${result.action.toUpperCase()}`);
+    console.log(`  Risk Score      : ${result.riskScore}/100`);
+    console.log(`  Secrets Redacted: ${result.secretsRedacted}`);
+
+    if (result.threats.length > 0) {
+      console.log('\n  Detected Threats:');
+      for (const t of result.threats) {
+        console.log(`    • ${t.ruleId} [${t.severity.toUpperCase()}] (${t.category}): ${t.description}`);
+        console.log(`      Match: ${t.matchedSnippet}`);
+      }
+    }
+    console.log(`\n  Sanitized Output:\n  ${result.sanitizedText}\n`);
+  });
+
+securityCommand
+  .command('audit-skill <nameOrPath>')
+  .description('Audit a registered skill by name or a local SKILL.md / script file against SEC-001..SEC-012')
+  .option('--db <path>', 'Path to OpenTalon SQLite database', 'opentalon.db')
+  .action(async (nameOrPath: string, options: { db: string }) => {
+    let targetName = nameOrPath;
+    let code = '';
+    let capabilities: CapabilityGrant | undefined;
+
+    const resolvedPath = path.resolve(nameOrPath);
+    if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isFile()) {
+      const raw = fs.readFileSync(resolvedPath, 'utf-8');
+      if (resolvedPath.toLowerCase().endsWith('.md')) {
+        const parsed = SkillMarkdownParser.parse(raw);
+        targetName = parsed.metadata.name;
+        code = parsed.executableCode;
+        capabilities = parsed.metadata.capabilities;
+      } else {
+        targetName = path.basename(resolvedPath);
+        code = raw;
+      }
+    } else {
+      const { memory } = getComponents(options.db);
+      await memory.initialize();
+      try {
+        const skill = await memory.getSkill(nameOrPath);
+        if (!skill) {
+          console.error(`\x1b[31m❌ Skill "${nameOrPath}" not found in DB or filesystem.\x1b[0m`);
+          process.exitCode = 1;
+          return;
+        }
+        targetName = skill.name;
+        code = skill.code;
+        capabilities = skill.capabilities;
+      } finally {
+        await memory.close();
+      }
+    }
+
+    const report = SecurityGate.auditSkillCode(code, capabilities);
+    const statusLabel = report.passed ? '\x1b[32mPASS\x1b[0m' : '\x1b[31mFAIL\x1b[0m';
+    console.log(`\n\x1b[1m🛡️  Static Security Audit: ${targetName}\x1b[0m`);
+    console.log('──────────────────────────────────────────────────────────');
+    console.log(`  Status : ${statusLabel}`);
+    console.log(`  Score  : ${report.score}/100`);
+
+    if (report.violations.length === 0) {
+      console.log('  Issues : None detected.\n');
+    } else {
+      console.log(`  Issues : ${report.violations.length} violation(s)\n`);
+      for (const v of report.violations) {
+        console.log(`    • ${v.ruleId} [${v.severity.toUpperCase()}] (${v.title}): ${v.description}`);
+        if (v.matchedSnippet) {
+          console.log(`      Snippet: ${v.matchedSnippet}`);
+        }
+      }
+      console.log('');
+    }
+
+    if (!report.passed) {
+      process.exitCode = 1;
     }
   });
 

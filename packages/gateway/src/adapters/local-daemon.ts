@@ -20,8 +20,13 @@ import {
 import { type FederatedPeer } from '@opentalon/memory';
 import { type GatewayRequestPayload, type GatewayResponsePayload } from '../types.js';
 import { getDashboardHtml } from '../dashboard/html.js';
+import {
+  getPrivacyPolicyHtml,
+  getTermsHtml,
+  getDataDeletionHtml,
+} from '../dashboard/legal-pages.js';
 import { SseStreamAdapter } from './sse-stream.js';
-import { RemoteSkillInstaller } from '@opentalon/skill-engine';
+import { RemoteSkillInstaller, SecurityGate } from '@opentalon/skill-engine';
 
 export interface LocalDaemonOptions {
   port?: number;
@@ -1350,6 +1355,106 @@ export class LocalDaemonAdapter {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: String(err) }));
           }
+          return;
+        }
+
+        // 31. Legal & Privacy Trio Pages (UU PDP No. 27/2022 & GDPR Art. 13/17)
+        if (req.method === 'GET' && (url.pathname === '/privacy' || url.pathname === '/privacy-policy')) {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(getPrivacyPolicyHtml());
+          return;
+        }
+
+        if (req.method === 'GET' && (url.pathname === '/terms' || url.pathname === '/terms-and-conditions')) {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(getTermsHtml());
+          return;
+        }
+
+        if (req.method === 'GET' && (url.pathname === '/delete-account' || url.pathname === '/data-deletion')) {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(getDataDeletionHtml());
+          return;
+        }
+
+        // 32. Right-to-Erasure Session Data Deletion API
+        if (req.method === 'POST' && url.pathname === '/api/privacy/delete-data') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const payload = (body ? JSON.parse(body) : {}) as { sessionId?: string };
+              const targetSessionId = payload.sessionId || '*';
+              const deleted = await this.router.getMemory().deleteSessionData(targetSessionId);
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(
+                JSON.stringify({
+                  success: true,
+                  sessionId: targetSessionId,
+                  deletedTraces: deleted.deletedTraces,
+                  deletedFacts: deleted.deletedFacts,
+                  compliance: ['UU-PDP-No-27-2022', 'GDPR-Art-17'],
+                })
+              );
+            } catch (err: unknown) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: String(err) }));
+            }
+          });
+          return;
+        }
+
+        // 33. Zero-Trust Security Shield & Firewall Telemetry Report
+        if (req.method === 'GET' && url.pathname === '/api/security/report') {
+          try {
+            const skills = await this.router.getMemory().listSkills();
+            const skillsAudit = skills.map((s) => ({
+              name: s.name,
+              version: s.version,
+              ...SecurityGate.auditSkillCode(s.code, s.capabilities),
+            }));
+            const firewall = this.router.getFirewall().getStats();
+            const recentEvents = this.router.getFirewall().getRecentEvents(30);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ firewall, recentEvents, skillsAudit }));
+          } catch (err: unknown) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+          return;
+        }
+
+        // 34. Interactive Security Audit (Prompt Injection + Skill Static Gate)
+        if (req.method === 'POST' && url.pathname === '/api/security/audit') {
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const payload = (body ? JSON.parse(body) : {}) as {
+                prompt?: string;
+                code?: string;
+                capabilities?: Record<string, unknown>;
+                mode?: 'block' | 'sanitize' | 'audit';
+              };
+              const promptScan =
+                typeof payload.prompt === 'string'
+                  ? this.router.getFirewall().scan(payload.prompt, payload.mode)
+                  : undefined;
+              const codeAudit =
+                typeof payload.code === 'string'
+                  ? SecurityGate.auditSkillCode(payload.code, payload.capabilities as any)
+                  : undefined;
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ promptScan, codeAudit }));
+            } catch (err: unknown) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: String(err) }));
+            }
+          });
           return;
         }
 
